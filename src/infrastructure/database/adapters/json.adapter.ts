@@ -158,13 +158,14 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
             ...overrides,
         };
 
-        this.store.users[userId] = record;
+        this.store.users[key] = record;
         this.markDirty("users");
         return record;
     }
 
     async updateUser(userId: string, data: Partial<UserRecord>): Promise<UserRecord> {
-        const existing = this.store.users[userId];
+        const key = this.safeKey(userId);
+        const existing = this.store.users[key];
         if (!existing) throw new Error(`User not found: ${userId}`);
 
         if (data.name !== undefined) existing.name = data.name ?? null;
@@ -180,9 +181,10 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     }
 
     async deleteUser(userId: string): Promise<UserRecord> {
-        const record = this.store.users[userId];
+        const key = this.safeKey(userId);
+        const record = this.store.users[key];
         if (!record) throw new Error(`User not found: ${userId}`);
-        delete this.store.users[userId];
+        delete this.store.users[key];
         this.markDirty("users");
         return record;
     }
@@ -230,15 +232,17 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     // ─── Group ───────────────────────────────────────────────────────────────
 
     async getGroup(groupId: string): Promise<GroupRecord | null> {
-        return this.store.groups[groupId] ?? null;
+        const key = this.safeKey(groupId);
+        return this.store.groups[key] ?? null;
     }
 
     async upsertGroup(groupId: string, groupData: any): Promise<GroupRecord> {
         const settings = groupData.settings ?? {};
         settings.antilink = settings.antilink ?? {};
+        const key = this.safeKey(groupId);
 
         const merged: GroupRecord = {
-            id: this.store.groups[groupId]?.id ?? this.newId(),
+            id: this.store.groups[key]?.id ?? this.newId(),
             groupId,
             subject: groupData.subject ?? "",
             subjectOwnerPn: groupData.subjectOwnerPn ?? null,
@@ -278,7 +282,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
             },
         };
 
-        this.store.groups[groupId] = merged;
+        this.store.groups[key] = merged;
         this.markDirty("groups");
         return merged;
     }
@@ -288,7 +292,8 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
             return this.upsertGroup(groupId, data.groupMetadata);
         }
 
-        const existing = this.store.groups[groupId];
+        const groupKey = this.safeKey(groupId);
+        const existing = this.store.groups[groupKey];
         if (!existing) throw new Error(`Group not found: ${groupId}`);
 
         const updatableKeys: Array<keyof GroupRecord> = [
@@ -326,7 +331,8 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     }
 
     async updateGroupSettings(groupId: string, settings: Partial<GroupSettingsRecord>): Promise<GroupRecord> {
-        const existing = this.store.groups[groupId];
+        const groupKey = this.safeKey(groupId);
+        const existing = this.store.groups[groupKey];
         if (!existing) throw new Error(`Group not found: ${groupId}`);
 
         const settingKeys: Array<keyof GroupSettingsRecord> = [
@@ -351,9 +357,10 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     }
 
     async deleteGroup(groupId: string): Promise<GroupRecord> {
-        const record = this.store.groups[groupId];
+        const key = this.safeKey(groupId);
+        const record = this.store.groups[key];
         if (!record) throw new Error(`Group not found: ${groupId}`);
-        delete this.store.groups[groupId];
+        delete this.store.groups[key];
         this.markDirty("groups");
         return record;
     }
@@ -392,7 +399,8 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     }
 
     async findAdminByUsername(username: string): Promise<AdminRecord | null> {
-        return this.store.admins[username] ?? null;
+        const key = this.safeKey(username);
+        return this.store.admins[key] ?? null;
     }
 
     async findAdminByPhoneNumber(phoneNumber: string): Promise<AdminRecord | null> {
@@ -400,7 +408,8 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     }
 
     async createAdmin(data: { phoneNumber: string; username: string; password: string }): Promise<AdminRecord> {
-        if (this.store.admins[data.username]) throw new Error(`Admin already exists: ${data.username}`);
+        const key = this.safeKey(data.username);
+        if (this.store.admins[key]) throw new Error(`Admin already exists: ${data.username}`);
 
         const now = new Date();
         const record: AdminRecord = {
@@ -413,7 +422,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
             updatedAt: now,
         };
 
-        this.store.admins[data.username] = record;
+        this.store.admins[key] = record;
         this.markDirty("admins");
         return record;
     }
@@ -428,9 +437,10 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     }
 
     async deleteAdmin(username: string): Promise<AdminRecord> {
-        const record = this.store.admins[username];
+        const key = this.safeKey(username);
+        const record = this.store.admins[key];
         if (!record) throw new Error(`Admin not found: ${username}`);
-        delete this.store.admins[username];
+        delete this.store.admins[key];
         this.markDirty("admins");
         return record;
     }
@@ -444,22 +454,25 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     // ─── Session ─────────────────────────────────────────────────────────────
 
     async getSession(sessionId: string): Promise<SessionRecord | null> {
-        return this.store.sessions[sessionId] ?? null;
+        const key = this.safeKey(sessionId);
+        return this.store.sessions[key] ?? null;
     }
 
     async setSession(sessionId: string, session: string): Promise<SessionRecord> {
-        const record: SessionRecord = this.store.sessions[sessionId] ?? {
+        const key = this.safeKey(sessionId);
+        const record: SessionRecord = this.store.sessions[key] ?? {
             id: this.newId(),
             sessionId,
         };
         record.session = session;
-        this.store.sessions[sessionId] = record;
+        this.store.sessions[key] = record;
         this.markDirty("sessions");
         return record;
     }
 
     async deleteSession(sessionId: string): Promise<void> {
-        delete this.store.sessions[sessionId];
+        const key = this.safeKey(sessionId);
+        delete this.store.sessions[key];
         this.markDirty("sessions");
     }
 
