@@ -124,16 +124,6 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         return key;
     }
 
-    /** Safe alternative to Object.assign that skips prototype-polluting keys. */
-    private safeAssign<T extends object>(target: T, source: Partial<T>): T {
-        for (const key of Object.keys(source)) {
-            if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
-            if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
-            (target as any)[key] = (source as any)[key];
-        }
-        return target;
-    }
-
     // ─── User ────────────────────────────────────────────────────────────────
 
     async getUser(userId: string): Promise<UserRecord | null> {
@@ -177,7 +167,14 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         const existing = this.store.users[userId];
         if (!existing) throw new Error(`User not found: ${userId}`);
 
-        this.safeAssign(existing, data);
+        if (data.name !== undefined) existing.name = data.name ?? null;
+        if (data.limit !== undefined) existing.limit = data.limit;
+        if (data.role !== undefined) existing.role = data.role;
+        if (data.expired !== undefined) existing.expired = data.expired;
+        if (data.isBanned !== undefined) existing.isBanned = data.isBanned;
+        if (data.afk !== undefined) existing.afk = data.afk;
+        if (data.level !== undefined) existing.level = data.level;
+        if (data.stats !== undefined) existing.stats = data.stats;
         this.markDirty("users");
         return existing;
     }
@@ -294,7 +291,36 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         const existing = this.store.groups[groupId];
         if (!existing) throw new Error(`Group not found: ${groupId}`);
 
-        this.safeAssign(existing, data);
+        const updatableKeys: Array<keyof GroupRecord> = [
+            "subject",
+            "subjectOwnerPn",
+            "addressingMode",
+            "size",
+            "creation",
+            "owner",
+            "ownerPn",
+            "owner_country_code",
+            "desc",
+            "descOwner",
+            "descOwnerPn",
+            "descTime",
+            "linkedParent",
+            "joinApprovalMode",
+            "restrict",
+            "announce",
+            "isCommunity",
+            "isCommunityAnnounce",
+            "memberAddMode",
+            "participants",
+            "ephemeralDuration",
+            "settings",
+        ];
+
+        for (const key of updatableKeys) {
+            if (data[key] !== undefined) {
+                (existing as any)[key] = data[key];
+            }
+        }
         this.markDirty("groups");
         return existing;
     }
@@ -303,7 +329,23 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         const existing = this.store.groups[groupId];
         if (!existing) throw new Error(`Group not found: ${groupId}`);
 
-        this.safeAssign(existing.settings, settings as Partial<GroupSettingsRecord>);
+        const settingKeys: Array<keyof GroupSettingsRecord> = [
+            "notify",
+            "welcome",
+            "welcomeMessage",
+            "leave",
+            "leaveMessage",
+            "mute",
+            "antilink",
+            "antibot",
+            "banned",
+        ];
+
+        for (const key of settingKeys) {
+            if (settings[key] !== undefined) {
+                (existing.settings as any)[key] = settings[key];
+            }
+        }
         this.markDirty("groups");
         return existing;
     }
