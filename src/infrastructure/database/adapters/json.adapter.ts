@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS: GroupSettingsRecord = {
 };
 
 export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRepository, ISessionRepository {
+    private static exitHandlersRegistered = false;
     private dataDir: string;
     private store: JsonStore = { users: {}, groups: {}, admins: {}, sessions: {} };
     private dirty = new Set<keyof JsonStore>();
@@ -64,9 +65,12 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         this.ensureDataDir();
         this.loadAll();
         // Persist any remaining dirty state on process exit
-        process.on("exit", () => this.flushAll());
-        process.on("SIGINT", () => { this.flushAll(); process.exit(0); });
-        process.on("SIGTERM", () => { this.flushAll(); process.exit(0); });
+        if (!JsonAdapter.exitHandlersRegistered) {
+            process.on("exit", () => this.flushAll());
+            process.on("SIGINT", () => { this.flushAll(); process.exit(0); });
+            process.on("SIGTERM", () => { this.flushAll(); process.exit(0); });
+            JsonAdapter.exitHandlersRegistered = true;
+        }
     }
 
     private ensureDataDir(): void {

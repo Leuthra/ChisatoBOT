@@ -32,7 +32,11 @@ class DatabaseService {
         this.adapters = createDatabaseAdapters();
         this.cache = inMemoryCache;
         this.initPromise = this.initialize();
-        this.initPromise.catch(() => void 0);
+        this.initPromise.catch((error) => {
+            logger.warn(
+                `Database initialization failed; call databaseService.ready() to surface errors. ${error instanceof Error ? error.message : String(error)}`
+            );
+        });
     }
 
     public static getInstance(): DatabaseService {

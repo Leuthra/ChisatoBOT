@@ -26,7 +26,7 @@ export async function groupsRoutes(fastify: FastifyInstance) {
             return {
                 groups: groups.map((g) => ({
                     ...g,
-                    participantsCount: g.participants?.length ?? 0,
+                    participantsCount: getParticipantCount(g),
                     createdAt: new Date(g.creation * 1000).toISOString(),
                 })),
                 pagination: {
@@ -53,7 +53,7 @@ export async function groupsRoutes(fastify: FastifyInstance) {
 
             return {
                 ...group,
-                participantsCount: group.participants?.length ?? 0,
+                participantsCount: getParticipantCount(group),
                 createdAt: new Date(group.creation * 1000).toISOString(),
                 descriptionUpdatedAt: group.descTime
                     ? new Date(group.descTime * 1000).toISOString()
@@ -77,7 +77,7 @@ export async function groupsRoutes(fastify: FastifyInstance) {
             return {
                 owner: group.owner,
                 participants: group.participants ?? [],
-                total: group.participants?.length ?? 0,
+                total: getParticipantCount(group),
             };
         } catch (error) {
             reply.status(500).send({ error: "Failed to fetch participants" });
@@ -114,17 +114,17 @@ export async function groupsRoutes(fastify: FastifyInstance) {
             const stats = {
                 totalGroups: groups.length,
                 totalParticipants: groups.reduce(
-                    (sum, g) => sum + (g.participants?.length ?? 0),
+                    (sum, g) => sum + getParticipantCount(g),
                     0
                 ),
                 averageSize: groups.length
-                    ? groups.reduce((sum, g) => sum + (g.participants?.length ?? 0), 0) / groups.length
+                    ? groups.reduce((sum, g) => sum + getParticipantCount(g), 0) / groups.length
                     : 0,
                 largestGroup: groups.length
-                    ? Math.max(...groups.map((g) => g.participants?.length ?? 0))
+                    ? Math.max(...groups.map((g) => getParticipantCount(g)))
                     : 0,
                 smallestGroup: groups.length
-                    ? Math.min(...groups.map((g) => g.participants?.length ?? 0))
+                    ? Math.min(...groups.map((g) => getParticipantCount(g)))
                     : 0,
                 settings: {
                     antilink: groups.filter((g) => g.settings?.antilink?.status).length,
@@ -214,4 +214,8 @@ export async function groupsRoutes(fastify: FastifyInstance) {
             reply.status(500).send({ error: "Failed to delete group" });
         }
     });
+}
+
+function getParticipantCount(group: { participants?: Array<unknown> | null }): number {
+    return group.participants?.length ?? 0;
 }
