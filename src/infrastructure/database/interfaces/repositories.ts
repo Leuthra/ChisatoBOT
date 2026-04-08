@@ -3,11 +3,13 @@ import type {
     GroupFilter,
     GroupRecord,
     GroupSettingsRecord,
+    GroupParticipantStats,
     PaginatedResult,
     SafeAdminRecord,
     SessionRecord,
     UserFilter,
     UserRecord,
+    UserSummaryStats,
     UserRole,
 } from "./types";
 
@@ -19,6 +21,7 @@ export interface IUserRepository {
     getUserCount(filter?: { role?: UserRole; isBanned?: boolean }): Promise<number>;
     getAllUsers(): Promise<UserRecord[]>;
     findUsers(filter: UserFilter): Promise<PaginatedResult<UserRecord>>;
+    getUserSummaryStats(now: number): Promise<UserSummaryStats>;
     resetUserLimits(limit: number): Promise<void>;
 }
 
@@ -31,6 +34,7 @@ export interface IGroupRepository {
     getGroupCount(filter?: GroupFilter): Promise<number>;
     getAllGroups(): Promise<GroupRecord[]>;
     findGroups(filter: GroupFilter): Promise<PaginatedResult<GroupRecord>>;
+    getGroupParticipantStats(): Promise<GroupParticipantStats>;
 }
 
 export interface IAdminRepository {

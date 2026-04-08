@@ -5,26 +5,19 @@ export async function statsRoutes(fastify: FastifyInstance) {
     // Get overall statistics
     fastify.get("/", async (request, reply) => {
         try {
-            const [totalUsers, totalGroups, premiumUsers, bannedUsers, groups] =
+            const [totalUsers, totalGroups, premiumUsers, bannedUsers, groupStats] =
                 await Promise.all([
                     databaseService.getUserCount(),
                     databaseService.getGroupCount(),
                     databaseService.getUserCount({ role: "premium" }),
                     databaseService.getUserCount({ isBanned: true }),
-                    databaseService.getAllGroups(),
+                    databaseService.getGroupParticipantStats(),
                 ]);
 
             const uptime = process.uptime();
             const uptimeString = formatUptime(uptime);
 
-            const totalParticipants = groups.reduce(
-                (sum, group) => sum + safeParticipantCount(group),
-                0
-            );
-
-            const activeGroups = groups.filter(
-                (g) => safeParticipantCount(g) > 0
-            ).length;
+            const { totalParticipants, activeGroups } = groupStats;
 
             return {
                 totalUsers,
@@ -116,11 +109,6 @@ function formatUptime(seconds: number): string {
     if (secs > 0) parts.push(`${secs}s`);
 
     return parts.join(" ");
-}
-
-// Safe access to participants length when the array is optional or null.
-function safeParticipantCount(group: { participants?: Array<unknown> | null }): number {
-    return group.participants?.length ?? 0;
 }
 
 function formatBytes(bytes: number): string {

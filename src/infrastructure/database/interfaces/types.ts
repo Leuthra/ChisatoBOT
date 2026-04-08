@@ -137,3 +137,24 @@ export type PaginatedResult<T> = {
     data: T[];
     total: number;
 };
+
+export type UserLimitStats = {
+    average: number;
+    max: number;
+    min: number;
+};
+
+export type UserSummaryStats = {
+    totalUsers: number;
+    freeUsers: number;
+    premiumUsers: number;
+    premiumActive: number;
+    premiumExpired: number;
+    afkTotal: number;
+    limits: UserLimitStats;
+};
+
+export type GroupParticipantStats = {
+    totalParticipants: number;
+    activeGroups: number;
+};

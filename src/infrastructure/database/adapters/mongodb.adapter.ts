@@ -8,11 +8,13 @@ import type {
     GroupFilter,
     GroupRecord,
     GroupSettingsRecord,
+    GroupParticipantStats,
     PaginatedResult,
     SafeAdminRecord,
     SessionRecord,
     UserFilter,
     UserRecord,
+    UserSummaryStats,
     UserRole,
 } from "../interfaces/types";
 import type {
@@ -144,6 +146,62 @@ export class MongoDBAdapter implements IUserRepository, IGroupRepository, IAdmin
         return { data: data as any, total };
     }
 
+    private afkCountFilter(): any {
+        const provider = (process.env.DB_PROVIDER ?? "mongodb").toLowerCase();
+        if (provider === "postgres" || provider === "sqlite") {
+            return { afk: { path: ["status"], equals: true } };
+        }
+        return { afk: { is: { status: true } } };
+    }
+
+    async getUserSummaryStats(now: number): Promise<UserSummaryStats> {
+        const [
+            totalUsers,
+            freeUsers,
+            premiumUsers,
+            premiumActive,
+            premiumExpired,
+            afkTotal,
+            limitStats,
+        ] = await Promise.all([
+            this.prisma.user.count(),
+            this.prisma.user.count({ where: { role: "free" as any } }),
+            this.prisma.user.count({ where: { role: "premium" as any } }),
+            this.prisma.user.count({
+                where: {
+                    role: "premium" as any,
+                    OR: [{ expired: 0 }, { expired: { gt: now } }],
+                },
+            }),
+            this.prisma.user.count({
+                where: {
+                    role: "premium" as any,
+                    expired: { gt: 0, lt: now },
+                },
+            }),
+            this.prisma.user.count({ where: this.afkCountFilter() }),
+            this.prisma.user.aggregate({
+                _avg: { limit: true },
+                _min: { limit: true },
+                _max: { limit: true },
+            }),
+        ]);
+
+        return {
+            totalUsers,
+            freeUsers,
+            premiumUsers,
+            premiumActive,
+            premiumExpired,
+            afkTotal,
+            limits: {
+                average: limitStats._avg.limit ?? 0,
+                max: limitStats._max.limit ?? 0,
+                min: limitStats._min.limit ?? 0,
+            },
+        };
+    }
+
     async resetUserLimits(limit: number): Promise<void> {
         await this.prisma.user.updateMany({
             where: { userId: { contains: "@s.whatsapp.net" }, role: { in: ["free"] } },
@@ -255,6 +313,18 @@ export class MongoDBAdapter implements IUserRepository, IGroupRepository, IAdmin
         ]);
 
         return { data: data as any, total };
+    }
+
+    async getGroupParticipantStats(): Promise<GroupParticipantStats> {
+        const [sumResult, activeGroups] = await Promise.all([
+            this.prisma.group.aggregate({ _sum: { size: true } }),
+            this.prisma.group.count({ where: { size: { gt: 0 } } }),
+        ]);
+
+        return {
+            totalParticipants: sumResult._sum.size ?? 0,
+            activeGroups,
+        };
     }
 
     // ─── Admin ───────────────────────────────────────────────────────────────

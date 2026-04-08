@@ -18,11 +18,13 @@ import type {
     GroupFilter,
     GroupRecord,
     GroupSettingsRecord,
+    GroupParticipantStats,
     PaginatedResult,
     SafeAdminRecord,
     SessionRecord,
     UserFilter,
     UserRecord,
+    UserSummaryStats,
     UserRole,
 } from "../interfaces/types";
 import type {
@@ -220,6 +222,59 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         return { data: results, total };
     }
 
+    async getUserSummaryStats(now: number): Promise<UserSummaryStats> {
+        const users = Object.values(this.store.users);
+        let totalLimit = 0;
+        let maxLimit = 0;
+        let minLimit = 0;
+        let freeUsers = 0;
+        let premiumUsers = 0;
+        let premiumActive = 0;
+        let premiumExpired = 0;
+        let afkTotal = 0;
+        let hasLimit = false;
+
+        for (const user of users) {
+            totalLimit += user.limit;
+            if (!hasLimit) {
+                minLimit = user.limit;
+                maxLimit = user.limit;
+                hasLimit = true;
+            } else {
+                if (user.limit > maxLimit) maxLimit = user.limit;
+                if (user.limit < minLimit) minLimit = user.limit;
+            }
+
+            if (user.role === "free") freeUsers += 1;
+            if (user.role === "premium") {
+                premiumUsers += 1;
+                if (user.expired === 0 || user.expired > now) {
+                    premiumActive += 1;
+                } else if (user.expired > 0 && user.expired < now) {
+                    premiumExpired += 1;
+                }
+            }
+
+            if (user.afk?.status) afkTotal += 1;
+        }
+
+        const average = users.length ? totalLimit / users.length : 0;
+
+        return {
+            totalUsers: users.length,
+            freeUsers,
+            premiumUsers,
+            premiumActive,
+            premiumExpired,
+            afkTotal,
+            limits: {
+                average,
+                max: users.length ? maxLimit : 0,
+                min: users.length ? minLimit : 0,
+            },
+        };
+    }
+
     async resetUserLimits(limit: number): Promise<void> {
         for (const user of Object.values(this.store.users)) {
             if (user.role === "free" && user.userId.includes("@s.whatsapp.net")) {
@@ -390,6 +445,22 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         if (filter.take) results = results.slice(0, filter.take);
 
         return { data: results, total };
+    }
+
+    async getGroupParticipantStats(): Promise<GroupParticipantStats> {
+        const groups = Object.values(this.store.groups);
+        let totalParticipants = 0;
+        let activeGroups = 0;
+
+        for (const group of groups) {
+            const size = typeof group.size === "number"
+                ? group.size
+                : group.participants?.length ?? 0;
+            totalParticipants += size;
+            if (size > 0) activeGroups += 1;
+        }
+
+        return { totalParticipants, activeGroups };
     }
 
     // ─── Admin ───────────────────────────────────────────────────────────────

@@ -7,11 +7,13 @@ import type {
     GroupFilter,
     GroupRecord,
     GroupSettingsRecord,
+    GroupParticipantStats,
     PaginatedResult,
     SafeAdminRecord,
     SessionRecord,
     UserFilter,
     UserRecord,
+    UserSummaryStats,
     UserRole,
 } from "./interfaces/types";
 
@@ -145,6 +147,10 @@ class DatabaseService {
         return this.adapters.user.findUsers(filter);
     }
 
+    public async getUserSummaryStats(now: number): Promise<UserSummaryStats> {
+        return this.adapters.user.getUserSummaryStats(now);
+    }
+
     public async resetUserLimits(limit: number): Promise<void> {
         await this.adapters.user.resetUserLimits(limit);
         this.cache.clear();
@@ -240,6 +246,10 @@ class DatabaseService {
 
     public async findGroups(filter: GroupFilter): Promise<PaginatedResult<GroupRecord>> {
         return this.adapters.group.findGroups(filter);
+    }
+
+    public async getGroupParticipantStats(): Promise<GroupParticipantStats> {
+        return this.adapters.group.getGroupParticipantStats();
     }
 
     // ─── Admin ───────────────────────────────────────────────────────────────

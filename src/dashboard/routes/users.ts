@@ -146,45 +146,23 @@ export async function usersRoutes(fastify: FastifyInstance) {
     // Get users statistics
     fastify.get("/stats/summary", async (request, reply) => {
         try {
-            const users = await databaseService.getAllUsers();
             const now = Date.now();
-            let totalLimit = 0;
-            let maxLimit = 0;
-            let minLimit = 0;
-
-            if (users.length) {
-                minLimit = users[0].limit;
-                for (const user of users) {
-                    totalLimit += user.limit;
-                    if (user.limit > maxLimit) maxLimit = user.limit;
-                    if (user.limit < minLimit) minLimit = user.limit;
-                }
-            }
+            const summary = await databaseService.getUserSummaryStats(now);
 
             const stats = {
-                totalUsers: users.length,
+                totalUsers: summary.totalUsers,
                 byRole: {
-                    free: users.filter((u) => u.role === "free").length,
-                    premium: users.filter((u) => u.role === "premium").length,
+                    free: summary.freeUsers,
+                    premium: summary.premiumUsers,
                 },
                 premium: {
-                    active: users.filter(
-                        (u) => u.role === "premium" && (u.expired === 0 || u.expired > now)
-                    ).length,
-                    expired: users.filter(
-                        (u) => u.role === "premium" && u.expired > 0 && u.expired < now
-                    ).length,
+                    active: summary.premiumActive,
+                    expired: summary.premiumExpired,
                 },
                 afk: {
-                    total: users.filter((u) => u.afk?.status).length,
+                    total: summary.afkTotal,
                 },
-                limits: users.length
-                    ? {
-                        average: totalLimit / users.length,
-                        max: maxLimit,
-                        min: minLimit,
-                    }
-                    : { average: 0, max: 0, min: 0 },
+                limits: summary.limits,
             };
 
             return stats;
