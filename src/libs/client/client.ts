@@ -396,7 +396,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             "messaging-history.set",
             "chats.upsert",
             "chats.update",
-            "chats.phoneNumberShare",
+            "lid-mapping.update",
             "chats.delete",
             "presence.update",
             "contacts.upsert",
@@ -410,6 +410,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             "groups.upsert",
             "groups.update",
             "group-participants.update",
+            "group.join-request",
             "blocklist.set",
             "blocklist.update",
             // 'call',
@@ -734,17 +735,27 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
 
     public decodeJid = async (jid: string | null | undefined) => {
         if (!jid) return "";
-        if (/:\d+@/gi.test(jid)) {
+        let resolved = jid.trim();
+        if (/:\d+@/gi.test(resolved)) {
             const baileys = await getBaileys();
             const { jidDecode } = baileys;
-            const decode = jidDecode(jid) || ({} as any);
-            return (
+            const decode = jidDecode(resolved) || ({} as any);
+            resolved = (
                 (decode.user &&
                     decode.server &&
                     decode.user + "@" + decode.server) ||
-                jid
+                resolved
             ).trim();
-        } else return jid.trim();
+        }
+        // If the result is still a LID JID, attempt to resolve it to PN via
+        // the signal repository LID mapping stored by Baileys.
+        if (resolved.endsWith("@lid")) {
+            try {
+                const pn = await (this as any).signalRepository?.lidMapping?.getPNForLID(resolved);
+                if (pn) return (pn as string).trim();
+            } catch {}
+        }
+        return resolved;
     };
 
     /**

@@ -35,7 +35,6 @@ export class MessageContextBuilder {
 
             // Bot data
             const botNumber = await Chisato.decodeJid(Chisato.user.id);
-            const botLid = Chisato.user.lid
             const botName = Chisato.user.name;
             const prefix =
                 body && /^[°•π÷×¶∆£¢€¥®™+✓/_=|~!?@#$%^&.©^]/gi.test(body)
@@ -106,16 +105,16 @@ export class MessageContextBuilder {
 
             const isGroupAdmin =
                 isGroup &&
-                !!groupAdmins?.find((v) => v.phoneNumber === sender);
+                !!groupAdmins?.find((v) => (v.phoneNumber ?? v.id) === sender);
             const isGroupOwner =
                 isGroup &&
                 !!groupAdmins?.find(
                     (v) =>
-                        v.phoneNumber === sender && v.admin === "superadmin"
+                        (v.phoneNumber ?? v.id) === sender && v.admin === "superadmin"
                 );
             const isBotAdmin =
                 isGroup &&
-                !!groupAdmins?.find((v) => v.phoneNumber === botNumber);
+                !!groupAdmins?.find((v) => (v.phoneNumber ?? v.id) === botNumber);
             const isBlock = blockList.includes(sender);
             const isBanned =
                 isGroup && groupSettingData?.banned?.includes(sender);

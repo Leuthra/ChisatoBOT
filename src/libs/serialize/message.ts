@@ -43,7 +43,7 @@ export const message = async (
         m.pushName = message.pushName;
         m.mentions = m.message[m.type]?.contextInfo?.mentionedJid || [];
         m.sender = m.isGroup
-            ? await Chisato.decodeJid(m.key.participantAlt)
+            ? await Chisato.decodeJid(m.key.participantAlt || m.key.participant)
             : m.fromMe
             ? await Chisato.decodeJid(Chisato.user.id)
             : m.from;

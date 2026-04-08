@@ -17,7 +17,7 @@ export const group = async (message: WAMessage): Promise<GroupSerialize> => {
         };
         m.parameters = message.messageStubParameters;
         m.from = message.key.remoteJid;
-        m.participant = message.key.participantAlt || message.participant;
+        m.participant = (message.key.addressingMode === "lid" ? message.key.participantAlt : message.key.participant) || message.key.participantAlt || message.participant;
         m.type = 72;
         m.message = message.message;
         m.expiration = m.message?.protocolMessage?.ephemeralExpiration || 0;
@@ -37,7 +37,7 @@ export const group = async (message: WAMessage): Promise<GroupSerialize> => {
     };
     m.from = message.key.remoteJid;
     m.timestamp = message.messageTimestamp;
-    m.participant = message.key.participantAlt || message.participant;
+    m.participant = (message.key.addressingMode === "lid" ? message.key.participantAlt : message.key.participant) || message.key.participantAlt || message.participant;
     m.type = message.messageStubType;
     m.message = message?.message || {};
     m.expiration = m.message?.protocolMessage?.ephemeralExpiration || 0;
