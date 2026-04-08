@@ -18,7 +18,7 @@ export default {
             for (let i = 0; i < Number(count); i++) {
                 const buffer = encodeWAMessage({
                     call: {
-                        callKey: new Uint8Array(crypto.getRandomValues(new Uint8Array(32)).buffer),
+                        callKey: crypto.randomBytes(32),
                     },
                 });
                 const enc = await Chisato.signalRepository.encryptMessage({

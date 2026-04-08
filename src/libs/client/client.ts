@@ -49,6 +49,7 @@ import { getAntiBan } from "../antiban/antiban";
 
 /** Livs */
 import { User as UserDatabase, Group as GroupDatabase } from "../database";
+import { databaseService } from "../../infrastructure/database";
 
 type Events = {
     "group.update": (creds: proto.IWebMessageInfo) => void;
@@ -571,19 +572,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
     private reset() {
         // Reset user limit
         Cron("0 0 0 * * *", { timezone: this.config.timeZone }, async () => {
-            await Database.user.updateMany({
-                where: {
-                    userId: {
-                        contains: "@s.whatsapp.net",
-                    },
-                    role: {
-                        in: ["free"],
-                    },
-                },
-                data: {
-                    limit: this.config.limit.command,
-                },
-            });
+            await databaseService.resetUserLimits(this.config.limit.command);
 
             console.log(
                 clc.green.bold("[ ") +

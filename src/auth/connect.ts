@@ -41,6 +41,8 @@ logger.connect(
 
 (async () => {
     try {
+        await databaseService.ready();
+
         // Start dashboard server
         const dashboardPort = process.env.DASHBOARD_PORT
             ? parseInt(process.env.DASHBOARD_PORT)

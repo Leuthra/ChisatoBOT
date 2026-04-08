@@ -167,8 +167,8 @@ export const useSingleAuthState = async (
                     }, {});
                 },
                 set: async (data) => {
-                    for (const _key in data) {
-                        const key = KEY_MAP[_key as keyof SignalDataTypeMap];
+                    for (const _key of Object.keys(data) as Array<keyof SignalDataTypeMap>) {
+                        const key = KEY_MAP[_key];
                         keys[key] = keys[key] || {};
                         Object.assign(keys[key], data[_key]);
                     }

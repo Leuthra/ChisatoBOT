@@ -19,6 +19,7 @@ class DatabaseService {
     private static instance: DatabaseService;
     private adapters: DatabaseAdapters;
     private cache: ICacheService;
+    private initPromise: Promise<void>;
 
     private readonly CACHE_TTL = {
         USER: 5 * 60 * 1000,     // 5 minutes
@@ -28,7 +29,8 @@ class DatabaseService {
     private constructor() {
         this.adapters = createDatabaseAdapters();
         this.cache = inMemoryCache;
-        this.initialize();
+        this.initPromise = this.initialize();
+        this.initPromise.catch(() => void 0);
     }
 
     public static getInstance(): DatabaseService {
@@ -36,6 +38,10 @@ class DatabaseService {
             DatabaseService.instance = new DatabaseService();
         }
         return DatabaseService.instance;
+    }
+
+    public ready(): Promise<void> {
+        return this.initPromise;
     }
 
     private async initialize(): Promise<void> {

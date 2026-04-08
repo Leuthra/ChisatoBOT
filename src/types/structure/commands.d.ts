@@ -80,7 +80,7 @@ declare type Commands = {
 
 declare type ConfigSettings = {
     name: string;
-    isGroup: booelean;
+    isGroup: boolean;
     isBotAdmin: boolean;
     run: (args: EventsObject) => unknown;
 };
