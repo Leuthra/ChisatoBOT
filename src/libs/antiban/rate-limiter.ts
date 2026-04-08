@@ -1,4 +1,11 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+
+const RATE_LIMITER_STATE_FILE = path.join(
+    process.cwd(),
+    "rate-limiter-state.json"
+);
 
 export interface RateLimiterConfig {
     maxPerMinute: number;
@@ -61,6 +68,37 @@ export class RateLimiter {
 
     constructor(cfg: Partial<RateLimiterConfig> = {}) {
         this.cfg = { ...DEFAULT_CONFIG, ...cfg };
+        this.loadPersistedWindows();
+    }
+
+    /** Persist day-window to disk so daily quota survives restarts */
+    save(): void {
+        try {
+            fs.writeFileSync(
+                RATE_LIMITER_STATE_FILE,
+                JSON.stringify({ dayWindow: this.dayWindow }, null, 2)
+            );
+        } catch {
+            // Non-fatal
+        }
+    }
+
+    private loadPersistedWindows(): void {
+        try {
+            if (fs.existsSync(RATE_LIMITER_STATE_FILE)) {
+                const raw = fs.readFileSync(RATE_LIMITER_STATE_FILE, "utf-8");
+                const parsed = JSON.parse(raw) as { dayWindow?: number[] };
+                const now = Date.now();
+                // Only keep timestamps that still fall within the 24-hour window
+                if (Array.isArray(parsed.dayWindow)) {
+                    this.dayWindow = parsed.dayWindow.filter(
+                        (t) => now - t < 86_400_000
+                    );
+                }
+            }
+        } catch {
+            // Non-fatal — start with empty windows
+        }
     }
 
     /** Compute how long to wait before sending this message */
@@ -133,6 +171,9 @@ export class RateLimiter {
         const arr = this.recentHashes.get(hash) ?? [];
         arr.push(now);
         this.recentHashes.set(hash, arr);
+
+        // Persist day window so daily quota survives restarts
+        this.save();
     }
 
     getStats() {

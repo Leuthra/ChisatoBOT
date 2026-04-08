@@ -147,6 +147,7 @@ export class AntiBan {
 
     /** Persist all stateful components to disk. */
     save(): void {
+        this.rateLimiter.save();
         this.warmUp.save();
         this.timelock.save();
     }

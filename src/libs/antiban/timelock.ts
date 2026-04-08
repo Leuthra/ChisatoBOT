@@ -8,20 +8,26 @@ interface TimelockState {
     locked: boolean;
     lockedAt: string | null;   // ISO timestamp
     expiresAt: string | null;  // ISO timestamp
+    knownJids: string[];       // persisted across restarts so existing contacts aren't blocked
 }
 
 export class Timelock {
     private state: TimelockState;
-    /** JIDs that had at least one successful message before the lock */
-    private knownJids: Set<string> = new Set();
+    /** JIDs that had at least one successful message — persisted in state file */
+    private knownJids: Set<string>;
 
     constructor() {
         this.state = this.load();
+        this.knownJids = new Set(this.state.knownJids ?? []);
     }
 
-    /** Record a JID as a known contact (should be called after every successful send) */
+    /** Record a JID as a known contact (called after every successful send) */
     addKnownJid(jid: string): void {
-        this.knownJids.add(jid);
+        if (!this.knownJids.has(jid)) {
+            this.knownJids.add(jid);
+            // Keep state in sync so the next save() writes the updated set
+            this.state.knownJids = Array.from(this.knownJids);
+        }
     }
 
     /**
@@ -48,13 +54,19 @@ export class Timelock {
             locked: true,
             lockedAt: now.toISOString(),
             expiresAt: new Date(now.getTime() + durationMs).toISOString(),
+            knownJids: Array.from(this.knownJids),
         };
         this.save();
     }
 
     /** Manually lift the timelock */
     lift(): void {
-        this.state = { locked: false, lockedAt: null, expiresAt: null };
+        this.state = {
+            locked: false,
+            lockedAt: null,
+            expiresAt: null,
+            knownJids: Array.from(this.knownJids),
+        };
         this.save();
     }
 
@@ -102,6 +114,6 @@ export class Timelock {
         } catch {
             // Fall through
         }
-        return { locked: false, lockedAt: null, expiresAt: null };
+        return { locked: false, lockedAt: null, expiresAt: null, knownJids: [] };
     }
 }

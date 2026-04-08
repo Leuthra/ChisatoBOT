@@ -26,6 +26,7 @@ import util from "util";
 
 /** Config */
 import { commands } from "./commands";
+import { BotConfig } from "../../core/config/config.service";
 
 /** Types */
 import type { SocketConfig } from "../../types/auth/socket";
@@ -69,20 +70,26 @@ async function getBaileys() {
 }
 
 export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>) {
-    private config: Config;
+    private config: BotConfig;
     private package: any;
     private time: string;
     private socketConfig: SocketConfig;
     private antiban: ReturnType<typeof getAntiBan>;
+    /**
+     * True while the antiban-wrapped sendMessage is executing its inner send.
+     * Used to prevent the relayMessage wrapper from running a second antiban
+     * check for messages that already went through the sendMessage wrapper.
+     */
+    private _antibanSendActive = false;
     constructor(socketConfig: SocketConfig) {
         super();
         this.config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
         this.package = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
         this.socketConfig = socketConfig;
         // Initialise AntiBan with settings from config if provided
-        const ab = (this.config as any).antiban;
+        const ab = this.config.antiban;
         this.antiban = getAntiBan(ab ?? {});
-        moment.tz.setDefault(this.config.timezone);
+        moment.tz.setDefault(this.config.timeZone);
         this.time = moment().format("DD/MM HH:mm:ss");
         this.readcommands();
     }
@@ -450,6 +457,34 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                 opts = { ...opts, additionalNodes };
             }
 
+            // ── AntiBan guard for direct relayMessage calls (e.g. sendButton) ──
+            // When _antibanSendActive is true, sendMessage wrapper has already
+            // performed the check — skip to avoid double-counting.
+            if (!this._antibanSendActive) {
+                const content = "[relay]";
+                const decision = this.antiban.beforeSend(jid, content);
+                if (!decision.allowed) {
+                    this.log(
+                        "info",
+                        `[AntiBan] relayMessage blocked — ${decision.reason ?? "rate limited"}`
+                    );
+                    return;
+                }
+                if (decision.delayMs > 0) {
+                    await new Promise((r) => setTimeout(r, decision.delayMs));
+                }
+                try {
+                    const result = await originalRelayMessage(jid, message, opts);
+                    this.antiban.afterSend(jid, content);
+                    return result;
+                } catch (err: any) {
+                    const code: number | undefined =
+                        err?.output?.statusCode ?? err?.statusCode;
+                    this.antiban.afterSendFailed(code);
+                    throw err;
+                }
+            }
+
             return originalRelayMessage(jid, message, opts);
         };
 
@@ -478,6 +513,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                 if (decision.delayMs > 0) {
                     await new Promise((r) => setTimeout(r, decision.delayMs));
                 }
+                this._antibanSendActive = true;
                 try {
                     const result = await originalSendMessage(jid, content, opts);
                     this.antiban.afterSend(jid, textContent);
@@ -487,6 +523,8 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                         err?.output?.statusCode ?? err?.statusCode;
                     this.antiban.afterSendFailed(code);
                     throw err;
+                } finally {
+                    this._antibanSendActive = false;
                 }
             };
         }
@@ -530,7 +568,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
 
     private reset() {
         // Reset user limit
-        Cron("0 0 0 * * *", { timezone: this.config.timezone }, async () => {
+        Cron("0 0 0 * * *", { timezone: this.config.timeZone }, async () => {
             await Database.user.updateMany({
                 where: {
                     userId: {

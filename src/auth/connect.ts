@@ -142,6 +142,7 @@ logger.connect(
         process.on("uncaughtException", (error) => {
             logger.error(`Uncaught Exception: ${util.inspect(error)}`);
             logger.error(error.stack || "");
+            antiBan.save();
         });
 
         logger.connect("All event handlers registered successfully");
