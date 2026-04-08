@@ -168,6 +168,7 @@ export const useSingleAuthState = async (
                 },
                 set: async (data) => {
                     for (const _key of Object.keys(data) as Array<keyof SignalDataTypeMap>) {
+                        if (!Object.prototype.hasOwnProperty.call(KEY_MAP, _key)) continue;
                         const key = KEY_MAP[_key];
                         keys[key] = keys[key] || {};
                         Object.assign(keys[key], data[_key]);

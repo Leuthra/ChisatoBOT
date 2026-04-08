@@ -260,6 +260,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
 
         const average = users.length ? totalLimit / users.length : 0;
 
+        // When no users are present, keep numeric defaults at 0 for dashboard displays.
         return {
             totalUsers: users.length,
             freeUsers,
@@ -453,8 +454,8 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         let activeGroups = 0;
 
         for (const group of groups) {
-            // Older JSON stores may omit size or store it incorrectly, so fallback to participants length.
-            const size = typeof group.size === "number"
+            // Older JSON stores may omit or mis-store size, so fallback to participants length.
+            const size = Number.isFinite(group.size)
                 ? group.size
                 : group.participants?.length ?? 0;
             totalParticipants += size;
