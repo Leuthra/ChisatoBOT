@@ -1,7 +1,7 @@
-import { fromBuffer } from "file-type";
 import type { Chisato } from "../../types/auth/chisato";
 
 let baileysModule: any = null;
+let fileTypeModule: any = null;
 
 async function getBaileys() {
     if (!baileysModule) {
@@ -9,6 +9,19 @@ async function getBaileys() {
         baileysModule = await dynamicImport("@whiskeysockets/baileys");
     }
     return baileysModule;
+}
+
+async function getFileTypeModule() {
+    if (!fileTypeModule) {
+        const dynamicImport = new Function('specifier', 'return import(specifier)');
+        fileTypeModule = await dynamicImport("file-type");
+    }
+    return fileTypeModule;
+}
+
+async function fileTypeFromBuffer(buffer: Buffer): Promise<FileTypeResult | undefined> {
+    const { fileTypeFromBuffer } = await getFileTypeModule();
+    return fileTypeFromBuffer(buffer);
 }
 
 type MediaType = "videoMessage" | "imageMessage";
@@ -36,6 +49,8 @@ interface Row {
     description?: string;
     id: string;
 }
+
+type FileTypeResult = { ext: string; mime: string } | undefined;
 
 interface Card {
     body?: string | null;
@@ -268,7 +283,7 @@ export class Carousel extends InteractiveButtons {
     }
 
     async getMessageType(media: Buffer) {
-        const fileType = await fromBuffer(media);
+        const fileType = await fileTypeFromBuffer(media);
         const mime = fileType?.mime || "";
         const messageType =
             mime.includes("gif") || mime.includes("video")
@@ -428,7 +443,7 @@ export class Native extends InteractiveButtons {
     }
 
     async getMessageType(media: Buffer) {
-        const fileType = await fromBuffer(media);
+        const fileType = await fileTypeFromBuffer(media);
         const mime = fileType?.mime || "";
         const messageType =
             mime.includes("gif") || mime.includes("video")

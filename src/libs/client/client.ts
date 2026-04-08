@@ -38,7 +38,6 @@ import type { MessageSerialize } from "../../types/structure/serialize";
 /** Utils */
 import { Validators, FileUtils } from "..";
 import { useMultiAuthState, useSingleAuthState } from "../../auth";
-import { fromBuffer } from "file-type";
 import { StickerGenerator, StickerType } from "../../utils/converter/sticker";
 
 /** Extensions */
@@ -58,9 +57,12 @@ type Events = {
     call: (call: WACallEvent) => void;
 };
 
+type FileTypeResult = { ext: string; mime: string } | undefined;
+
 let tryConnect = 0;
 
 let baileysModule: any = null;
+let fileTypeModule: any = null;
 
 async function getBaileys() {
     if (!baileysModule) {
@@ -68,6 +70,19 @@ async function getBaileys() {
         baileysModule = await dynamicImport("@whiskeysockets/baileys");
     }
     return baileysModule;
+}
+
+async function getFileTypeModule() {
+    if (!fileTypeModule) {
+        const dynamicImport = new Function('specifier', 'return import(specifier)');
+        fileTypeModule = await dynamicImport("file-type");
+    }
+    return fileTypeModule;
+}
+
+async function fileTypeFromBuffer(buffer: Buffer): Promise<FileTypeResult | undefined> {
+    const { fileTypeFromBuffer } = await getFileTypeModule();
+    return fileTypeFromBuffer(buffer);
 }
 
 export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>) {
@@ -674,7 +689,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             messageType
         );
         let buffer: Buffer | null = await toBuffer(stream);
-        const type = await fromBuffer(buffer);
+        const type = await fileTypeFromBuffer(buffer);
         const filePath = attachExtension
             ? pathfile + "." + (type?.ext || "bin")
             : pathfile;

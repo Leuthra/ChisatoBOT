@@ -1,16 +1,30 @@
 import fs from "fs";
-import { fromBuffer } from "file-type";
 import { spawn } from "child_process";
 import { BaseHTTPClient } from "../core/base-http-client";
 
 // HTTP client for downloading files
 const httpClient = new BaseHTTPClient({ timeout: 15000, maxRetries: 3 });
+type FileTypeResult = { ext: string; mime: string } | undefined;
+let fileTypeModule: any = null;
+
+async function getFileTypeModule() {
+    if (!fileTypeModule) {
+        const dynamicImport = new Function('specifier', 'return import(specifier)');
+        fileTypeModule = await dynamicImport("file-type");
+    }
+    return fileTypeModule;
+}
+
+async function fileTypeFromBuffer(buffer: Buffer): Promise<FileTypeResult | undefined> {
+    const { fileTypeFromBuffer } = await getFileTypeModule();
+    return fileTypeFromBuffer(buffer);
+}
 
 export const toAudioMP3 = (url: string): Promise<Buffer> =>
     new Promise(async (resolve, reject) => {
         let buffer = await httpClient["getBuffer"](url);
         let tmp = `./temp/audio_${Date.now()}_${
-            (await fromBuffer(buffer)).ext
+            (await fileTypeFromBuffer(buffer))?.ext ?? "bin"
         }`;
         let out = tmp + ".mp3";
         fs.writeFileSync(tmp, buffer);
@@ -46,7 +60,7 @@ export const toAudioOpus = (url: string): Promise<Buffer> =>
     new Promise(async (resolve, reject) => {
         let buffer = await httpClient["getBuffer"](url);
         let tmp = `./temp/audio_${Date.now()}_${
-            (await fromBuffer(buffer)).ext
+            (await fileTypeFromBuffer(buffer))?.ext ?? "bin"
         }`;
         let out = tmp + ".opus";
         fs.writeFileSync(tmp, buffer);
@@ -81,7 +95,7 @@ export const toVideoMP4 = (url: string): Promise<Buffer> =>
     new Promise(async (resolve, reject) => {
         let buffer = await httpClient["getBuffer"](url);
         let tmp = `./temp/video_${Date.now()}_${
-            (await fromBuffer(buffer)).ext
+            (await fileTypeFromBuffer(buffer))?.ext ?? "bin"
         }`;
         let out = tmp + ".mp4";
         fs.writeFileSync(tmp, buffer);

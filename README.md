@@ -153,14 +153,6 @@ npm run build
 
 ### Run Project
 
--   Run with PM2
-
-```
-npm run pm2:start
-```
-
--   Without PM2
-
 ```
 npm start
 ```

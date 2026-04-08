@@ -18,12 +18,12 @@ export async function statsRoutes(fastify: FastifyInstance) {
             const uptimeString = formatUptime(uptime);
 
             const totalParticipants = groups.reduce(
-                (sum, group) => sum + (group.participants?.length ?? 0),
+                (sum, group) => sum + getParticipantCount(group),
                 0
             );
 
             const activeGroups = groups.filter(
-                (g) => g.participants && g.participants.length > 0
+                (g) => getParticipantCount(g) > 0
             ).length;
 
             return {
@@ -116,6 +116,10 @@ function formatUptime(seconds: number): string {
     if (secs > 0) parts.push(`${secs}s`);
 
     return parts.join(" ");
+}
+
+function getParticipantCount(group: { participants?: Array<unknown> | null }): number {
+    return group.participants?.length ?? 0;
 }
 
 function formatBytes(bytes: number): string {
