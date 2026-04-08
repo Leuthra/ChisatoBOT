@@ -47,4 +47,5 @@ export interface ISessionRepository {
     getSession(sessionId: string): Promise<SessionRecord | null>;
     setSession(sessionId: string, session: string): Promise<SessionRecord>;
     deleteSession(sessionId: string): Promise<void>;
+    clearSessions(): Promise<void>;
 }

@@ -36,7 +36,7 @@ import type { Readable } from "stream";
 import type { MessageSerialize } from "../../types/structure/serialize";
 
 /** Utils */
-import { Database, Validators, FileUtils } from "..";
+import { Validators, FileUtils } from "..";
 import { useMultiAuthState, useSingleAuthState } from "../../auth";
 import { fromBuffer } from "file-type";
 import { StickerGenerator, StickerType } from "../../utils/converter/sticker";
@@ -96,7 +96,8 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
 
     /** Connect to Whatsapp */
     async connect(): Promise<void> {
-        if (!process.env.DATABASE_URL) {
+        const dbProvider = (process.env.DB_PROVIDER ?? "mongodb").toLowerCase();
+        if (dbProvider !== "json" && !process.env.DATABASE_URL) {
             console.log(
                 clc.redBright("[ ") +
                     clc.yellowBright("ERROR") +
@@ -112,8 +113,8 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
         const { version, isLatest } = await fetchLatestWaWebVersion({} as any);
         const { state, saveCreds, clearState } =
             (this.socketConfig?.session === "single" &&
-                (await useSingleAuthState(Database))) ||
-            (await useMultiAuthState(Database));
+                (await useSingleAuthState())) ||
+            (await useMultiAuthState());
 
         /** Chisato as Client */
         const Chisato: Chisato = makeWASocket({

@@ -307,4 +307,8 @@ export class MongoDBAdapter implements IUserRepository, IGroupRepository, IAdmin
     async deleteSession(sessionId: string): Promise<void> {
         await this.prisma.session.delete({ where: { sessionId } }).catch(() => void 0);
     }
+
+    async clearSessions(): Promise<void> {
+        await this.prisma.session.deleteMany({});
+    }
 }

@@ -87,10 +87,14 @@ DASHBOARD_PORT=3000
 JWT_SECRET=
 PROXY=
 OCR_APIKEY=
+DB_PROVIDER=mongodb
+# REDIS_URL=redis://localhost:6379
 ```
 
 -   Edit your [.env](https://github.com/TobyG74/ChisatoBOT/blob/master/.env.example) file
 -   Rename `.env.example` to `.env`
+-   `DB_PROVIDER` defaults to `mongodb` (use `postgres`, `sqlite`, or `json` if needed)
+-   `REDIS_URL` is optional and enables Redis-backed caching
 
 ## Built With
 

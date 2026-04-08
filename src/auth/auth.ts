@@ -1,6 +1,6 @@
-import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationCreds, SignalDataTypeMap, proto } from "@whiskeysockets/baileys";
 import type { AuthState } from "../types/auth/auth";
+import { databaseService } from "../infrastructure/database";
 
 // Dynamic import cache for baileys
 let baileysModule: any = null;
@@ -15,7 +15,6 @@ async function getBaileys() {
 }
 
 export const useMultiAuthState = async (
-    Database: PrismaClient
 ): Promise<AuthState> => {
     const fixFileName = (fileName: string): string =>
         fileName.replace(/\//g, "__")?.replace(/:/g, "-");
@@ -26,19 +25,7 @@ export const useMultiAuthState = async (
             const { BufferJSON } = baileys;
             const sessionId = fixFileName(fileName);
             const session = JSON.stringify(data, BufferJSON.replacer);
-            await Database.session.upsert({
-                where: {
-                    sessionId,
-                },
-                update: {
-                    sessionId,
-                    session,
-                },
-                create: {
-                    sessionId,
-                    session,
-                },
-            });
+            await databaseService.setSession(sessionId, session);
         } catch {}
     };
 
@@ -47,12 +34,9 @@ export const useMultiAuthState = async (
             const baileys = await getBaileys();
             const { BufferJSON } = baileys;
             const sessionId = fixFileName(fileName);
-            const data = await Database.session.findFirst({
-                where: {
-                    sessionId,
-                },
-            });
-            return JSON.parse(data?.session, BufferJSON.reviver);
+            const data = await databaseService.getSession(sessionId);
+            if (!data?.session) return null;
+            return JSON.parse(data.session, BufferJSON.reviver);
         } catch {
             return null;
         }
@@ -61,11 +45,7 @@ export const useMultiAuthState = async (
     const removeData = async (fileName: string): Promise<void> => {
         try {
             const sessionId = fixFileName(fileName);
-            await Database.session.delete({
-                where: {
-                    sessionId,
-                },
-            });
+            await databaseService.deleteSession(sessionId);
         } catch {}
     };
 
@@ -121,14 +101,13 @@ export const useMultiAuthState = async (
         },
         clearState: async (): Promise<void> => {
             try {
-                await Database.session.deleteMany({});
+                await databaseService.clearSessions();
             } catch {}
         },
     };
 };
 
 export const useSingleAuthState = async (
-    Database: PrismaClient
 ): Promise<AuthState> => {
     const KEY_MAP: { [T in keyof SignalDataTypeMap]: string } = {
         "pre-key": "preKeys",
@@ -148,22 +127,13 @@ export const useSingleAuthState = async (
     let creds: AuthenticationCreds;
     let keys: unknown = {};
 
-    const storedCreds = await Database.session.findFirst({
-        where: {
-            sessionId: "creds",
-        },
-    });
+    const storedCreds = await databaseService.getSession("creds");
     if (storedCreds && storedCreds.session) {
         const parsedCreds = JSON.parse(storedCreds.session, BufferJSON.reviver);
         creds = parsedCreds.creds as AuthenticationCreds;
         keys = parsedCreds.keys;
     } else {
-        if (!storedCreds)
-            await Database.session.create({
-                data: {
-                    sessionId: "creds",
-                },
-            });
+        if (!storedCreds) await databaseService.setSession("creds", "");
         creds = initAuthCreds();
     }
 
@@ -173,10 +143,7 @@ export const useSingleAuthState = async (
                 { creds, keys },
                 BufferJSON.replacer
             );
-            await Database.session.update({
-                where: { sessionId: "creds" },
-                data: { session },
-            });
+            await databaseService.setSession("creds", session);
         } catch {}
     };
 
@@ -214,9 +181,7 @@ export const useSingleAuthState = async (
         saveCreds,
         clearState: async (): Promise<void> => {
             try {
-                await Database.session.delete({
-                    where: { sessionId: "creds" },
-                });
+                await databaseService.deleteSession("creds");
             } catch {}
         },
     };

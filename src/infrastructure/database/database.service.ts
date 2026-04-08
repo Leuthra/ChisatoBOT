@@ -279,6 +279,10 @@ class DatabaseService {
         return this.adapters.session.deleteSession(sessionId);
     }
 
+    public async clearSessions(): Promise<void> {
+        return this.adapters.session.clearSessions();
+    }
+
     // ─── Batch ───────────────────────────────────────────────────────────────
 
     public async batchUpdateUsers(updates: Array<{ userId: string; data: any }>): Promise<void> {

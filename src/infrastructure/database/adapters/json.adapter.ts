@@ -419,4 +419,9 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         delete this.store.sessions[sessionId];
         this.markDirty("sessions");
     }
+
+    async clearSessions(): Promise<void> {
+        this.store.sessions = {};
+        this.markDirty("sessions");
+    }
 }
