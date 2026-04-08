@@ -1,4 +1,5 @@
 import { logger } from "../../core/logger/logger.service";
+import { cacheService as inMemoryCache } from "../../core/cache/cache.service";
 import { createDatabaseAdapters, createCacheService, type DatabaseAdapters } from "./database.factory";
 import type { ICacheService } from "./interfaces/cache";
 import type {
@@ -26,9 +27,7 @@ class DatabaseService {
 
     private constructor() {
         this.adapters = createDatabaseAdapters();
-        // Cache starts as in-memory; upgraded to Redis asynchronously if REDIS_URL is set
-        const { cacheService: inMemory } = require("../../core/cache/cache.service");
-        this.cache = inMemory;
+        this.cache = inMemoryCache;
         this.initialize();
     }
 

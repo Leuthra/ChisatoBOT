@@ -116,14 +116,32 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         return crypto.randomBytes(12).toString("hex");
     }
 
+    /** Validates a store key is safe to use as an object property. */
+    private safeKey(key: string): string {
+        if (key === "__proto__" || key === "constructor" || key === "prototype") {
+            throw new Error(`Invalid key: ${key}`);
+        }
+        return key;
+    }
+
+    /** Safe alternative to Object.assign that skips prototype-polluting keys. */
+    private safeAssign<T extends object>(target: T, source: Partial<T>): T {
+        for (const key of Object.keys(source)) {
+            if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+            (target as any)[key] = (source as any)[key];
+        }
+        return target;
+    }
+
     // ─── User ────────────────────────────────────────────────────────────────
 
     async getUser(userId: string): Promise<UserRecord | null> {
-        return this.store.users[userId] ?? null;
+        return this.store.users[this.safeKey(userId)] ?? null;
     }
 
     async upsertUser(userId: string, name?: string | null, overrides?: Partial<UserRecord>): Promise<UserRecord> {
-        const existing = this.store.users[userId];
+        const key = this.safeKey(userId);
+        const existing = this.store.users[key];
         if (existing) {
             if (name !== undefined) existing.name = name ?? null;
             this.markDirty("users");
