@@ -1,4 +1,4 @@
-import { Group, Participant, User } from "@prisma/client";
+import type { GroupRecord, ParticipantRecord, UserRecord } from "../../infrastructure/database/interfaces/types";
 import { Chisato } from "./auth/client";
 import { MessageSerialize } from "./serialize";
 import { Group as GroupDatabaseType, User as UserDatabaseType } from "../../libs/database";
@@ -48,11 +48,11 @@ type CommandsObject = {
     Database?: Database;
     groupName?: string;
     groupDescription?: string;
-    groupParticipants?: Participant[];
-    groupAdmins?: Participant[];
-    groupMetadata?: Group;
+    groupParticipants?: ParticipantRecord[];
+    groupAdmins?: ParticipantRecord[];
+    groupMetadata?: GroupRecord;
     groupSettingData?: GroupSetting;
-    userMetadata?: User;
+    userMetadata?: UserRecord;
 };
 
 declare type Database = {

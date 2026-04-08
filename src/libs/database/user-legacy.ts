@@ -79,12 +79,11 @@ export class User {
 
     /**
      * Delete User Data from Database
-     * @deprecated Use databaseService directly
+     * @deprecated Use databaseService.deleteUser instead
      */
     public delete = async (userId: string): Promise<any> => {
         try {
-            const prisma = databaseService.getPrismaClient();
-            return await prisma.user.delete({ where: { userId } });
+            return await databaseService.deleteUser(userId);
         } catch (error) {
             logger.error(
                 `User delete error: ${

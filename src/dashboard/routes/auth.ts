@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { Database } from "../../infrastructure/database";
+import { databaseService } from "../../infrastructure/database";
 
 const JWT_SECRET = process.env.JWT_SECRET || "chisato-dashboard-secret-key";
 const JWT_EXPIRES_IN = "7d";
@@ -26,9 +26,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         }
 
         try {
-            const admin = await Database.admin.findUnique({
-                where: { username },
-            });
+            const admin = await databaseService.findAdminByUsername(username);
 
             if (!admin) {
                 return reply.status(401).send({
@@ -47,10 +45,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             }
 
             // Update last activity timestamp
-            await Database.admin.update({
-                where: { id: admin.id },
-                data: { lastActivity: new Date() },
-            });
+            await databaseService.updateAdmin(admin.id, { lastActivity: new Date() });
 
             const token = jwt.sign(
                 {
@@ -102,9 +97,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             };
 
             // Check session expiry based on lastActivity
-            const admin = await Database.admin.findUnique({
-                where: { id: decoded.id },
-            });
+            const admin = await databaseService.getAdminById(decoded.id);
 
             if (!admin) {
                 return reply.status(401).send({
@@ -124,10 +117,7 @@ export async function authRoutes(fastify: FastifyInstance) {
             }
 
             // Update last activity
-            await Database.admin.update({
-                where: { id: admin.id },
-                data: { lastActivity: new Date() },
-            });
+            await databaseService.updateAdmin(admin.id, { lastActivity: new Date() });
 
             return reply.send({
                 success: true,

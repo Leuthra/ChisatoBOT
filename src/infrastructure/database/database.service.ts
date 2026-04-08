@@ -1,25 +1,35 @@
-import { PrismaClient } from "@prisma/client";
-import { cacheService } from "../../core/cache/cache.service";
 import { logger } from "../../core/logger/logger.service";
-
-// Prisma types
-type PrismaUser = Awaited<ReturnType<PrismaClient["user"]["findUnique"]>>;
-type PrismaGroup = Awaited<ReturnType<PrismaClient["group"]["findUnique"]>>;
+import { createDatabaseAdapters, createCacheService, type DatabaseAdapters } from "./database.factory";
+import type { ICacheService } from "./interfaces/cache";
+import type {
+    AdminRecord,
+    GroupFilter,
+    GroupRecord,
+    GroupSettingsRecord,
+    PaginatedResult,
+    SafeAdminRecord,
+    SessionRecord,
+    UserFilter,
+    UserRecord,
+    UserRole,
+} from "./interfaces/types";
 
 class DatabaseService {
     private static instance: DatabaseService;
-    private prisma: PrismaClient;
+    private adapters: DatabaseAdapters;
+    private cache: ICacheService;
+
     private readonly CACHE_TTL = {
-        USER: 5 * 60 * 1000, // 5 minutes
-        GROUP: 10 * 60 * 1000, // 10 minutes
-        SETTINGS: 15 * 60 * 1000, // 15 minutes
+        USER: 5 * 60 * 1000,     // 5 minutes
+        GROUP: 10 * 60 * 1000,   // 10 minutes
     };
 
     private constructor() {
-        this.prisma = new PrismaClient({
-            log: ["error"],
-        });
-        this.initializeConnection();
+        this.adapters = createDatabaseAdapters();
+        // Cache starts as in-memory; upgraded to Redis asynchronously if REDIS_URL is set
+        const { cacheService: inMemory } = require("../../core/cache/cache.service");
+        this.cache = inMemory;
+        this.initialize();
     }
 
     public static getInstance(): DatabaseService {
@@ -29,201 +39,149 @@ class DatabaseService {
         return DatabaseService.instance;
     }
 
-    private async initializeConnection(): Promise<void> {
+    private async initialize(): Promise<void> {
         try {
-            await this.prisma.$connect();
-            logger.info("Database connected successfully");
+            if (this.adapters.connect) await this.adapters.connect();
+            logger.info(`Database connected (provider: ${process.env.DB_PROVIDER ?? "mongodb"})`);
         } catch (error) {
             logger.error(
-                `Database connection failed: ${
-                    error instanceof Error ? error.message : String(error)
-                }`
+                `Database connection failed: ${error instanceof Error ? error.message : String(error)}`
             );
             throw error;
         }
-    }
 
-    public getPrismaClient(): PrismaClient {
-        return this.prisma;
+        // Upgrade cache to Redis if available
+        try {
+            const redisCacheService = await createCacheService();
+            if (redisCacheService !== this.cache) {
+                this.cache = redisCacheService;
+                logger.info("Redis cache connected");
+            }
+        } catch {
+            // Redis not available — stay on in-memory cache
+        }
     }
 
     /**
-     * User Operations
+     * Returns the underlying Prisma client for adapters that support it.
+     * @deprecated Use databaseService methods instead of raw Prisma access.
      */
-    public async getUser(userId: string): Promise<PrismaUser | null> {
-        const cacheKey = `user:${userId}`;
+    public getPrismaClient(): any {
+        if (this.adapters.getPrismaClient) return this.adapters.getPrismaClient();
+        throw new Error(
+            `The active DB adapter (${process.env.DB_PROVIDER ?? "mongodb"}) does not expose a Prisma client.`
+        );
+    }
 
-        const user = await cacheService.getOrSet(
+    // ─── User ────────────────────────────────────────────────────────────────
+
+    public async getUser(userId: string): Promise<UserRecord | null> {
+        const cacheKey = `user:${userId}`;
+        const user = await this.cache.getOrSet(
             cacheKey,
-            () => this.prisma.user.findUnique({ where: { userId } }),
+            () => this.adapters.user.getUser(userId),
             this.CACHE_TTL.USER
         );
 
-        // Ensure level and stats are initialized
         if (user && (!user.level || !user.stats)) {
-            return await this.initializeUserLevelAndStats(userId);
+            return this.initializeUserLevelAndStats(userId);
         }
 
         return user;
     }
 
-    private async initializeUserLevelAndStats(userId: string): Promise<PrismaUser> {
-        const cacheKey = `user:${userId}`;
-        
-        const user = await this.prisma.user.update({
-            where: { userId },
-            data: {
-                level: {
-                    level: 1,
-                    xp: 0,
-                    totalXp: 0,
-                },
-                stats: {
-                    totalCommands: 0,
-                    commandsUsed: [],
-                    lastCommandTime: 0,
-                    joinedAt: Math.floor(Date.now() / 1000),
-                },
+    private async initializeUserLevelAndStats(userId: string): Promise<UserRecord> {
+        const user = await this.adapters.user.updateUser(userId, {
+            level: { level: 1, xp: 0, totalXp: 0 },
+            stats: {
+                totalCommands: 0,
+                commandsUsed: [],
+                lastCommandTime: 0,
+                joinedAt: Math.floor(Date.now() / 1000),
             },
         });
-
-        cacheService.set(cacheKey, user, this.CACHE_TTL.USER);
+        this.cache.set(`user:${userId}`, user, this.CACHE_TTL.USER);
         return user;
     }
 
-    public async upsertUser(
-        userId: string,
-        name?: string
-    ): Promise<PrismaUser> {
-        const cacheKey = `user:${userId}`;
-
-        const user = await this.prisma.user.upsert({
-            where: { userId },
-            create: {
-                userId,
-                name: name || null,
-                limit: 30,
-                role: "free",
-                expired: 0,
-                afk: {
-                    status: false,
-                    reason: null,
-                    since: 0,
-                },
-                level: {
-                    level: 1,
-                    xp: 0,
-                    totalXp: 0,
-                },
-                stats: {
-                    totalCommands: 0,
-                    commandsUsed: [],
-                    lastCommandTime: 0,
-                    joinedAt: Math.floor(Date.now() / 1000),
-                },
-            },
-            update: {
-                name: name || undefined,
-            },
-        });
-
-        cacheService.set(cacheKey, user, this.CACHE_TTL.USER);
+    public async upsertUser(userId: string, name?: string): Promise<UserRecord> {
+        const user = await this.adapters.user.upsertUser(userId, name ?? null);
+        this.cache.set(`user:${userId}`, user, this.CACHE_TTL.USER);
         return user;
     }
 
-    public async updateUser(userId: string, data: any): Promise<PrismaUser> {
-        const cacheKey = `user:${userId}`;
-
-        const user = await this.prisma.user.upsert({
-            where: { userId },
-            create: {
-                userId,
-                name: data.name || null,
-                limit: data.limit || 30,
-                role: data.role || "free",
-                expired: data.expired || 0,
-                afk: data.afk || {
-                    status: false,
-                    reason: null,
-                    since: 0,
-                },
-                level: data.level || {
-                    level: 1,
-                    xp: 0,
-                    totalXp: 0,
-                },
-                stats: data.stats || {
-                    totalCommands: 0,
-                    commandsUsed: [],
-                    lastCommandTime: 0,
-                    joinedAt: Math.floor(Date.now() / 1000),
-                },
-            },
-            update: data,
-        });
-
-        cacheService.set(cacheKey, user, this.CACHE_TTL.USER);
+    public async updateUser(userId: string, data: any): Promise<UserRecord> {
+        const user = await this.adapters.user.updateUser(userId, data);
+        this.cache.set(`user:${userId}`, user, this.CACHE_TTL.USER);
         return user;
     }
 
-    public async getUserCount(): Promise<number> {
-        return this.prisma.user.count();
+    public async createUser(data: Partial<UserRecord> & { userId: string }): Promise<UserRecord> {
+        const user = await this.adapters.user.upsertUser(data.userId, data.name ?? null, data);
+        this.cache.set(`user:${data.userId}`, user, this.CACHE_TTL.USER);
+        return user;
     }
 
-    /**
-     * Leveling Operations
-     */
+    public async deleteUser(userId: string): Promise<UserRecord> {
+        const user = await this.adapters.user.deleteUser(userId);
+        this.cache.delete(`user:${userId}`);
+        return user;
+    }
+
+    public async getUserCount(filter?: { role?: UserRole; isBanned?: boolean }): Promise<number> {
+        return this.adapters.user.getUserCount(filter);
+    }
+
+    public async getAllUsers(): Promise<UserRecord[]> {
+        return this.adapters.user.getAllUsers();
+    }
+
+    public async findUsers(filter: UserFilter): Promise<PaginatedResult<UserRecord>> {
+        return this.adapters.user.findUsers(filter);
+    }
+
+    public async resetUserLimits(limit: number): Promise<void> {
+        await this.adapters.user.resetUserLimits(limit);
+        logger.info("User limits reset, clearing user cache");
+    }
+
+    // ─── Leveling ────────────────────────────────────────────────────────────
+
     public async addUserXP(
         userId: string,
         xpToAdd: number,
         commandName: string
-    ): Promise<{ user: PrismaUser; leveledUp: boolean; newLevel?: number }> {
-        const cacheKey = `user:${userId}`;
-        
+    ): Promise<{ user: UserRecord; leveledUp: boolean; newLevel?: number }> {
         const user = await this.getUser(userId);
-        if (!user) {
-            throw new Error("User not found");
-        }
+        if (!user) throw new Error("User not found");
 
-        // Initialize level and stats if null
-        const currentLevel = user.level?.level || 1;
-        const currentXp = user.level?.xp || 0;
-        const totalXp = user.level?.totalXp || 0;
-        
-        // Calculate new XP and level
+        const currentLevel = user.level?.level ?? 1;
+        const currentXp = user.level?.xp ?? 0;
+        const totalXp = user.level?.totalXp ?? 0;
+
         const { addXP } = await import("../../utils/leveling");
         const result = addXP(currentLevel, currentXp, totalXp, xpToAdd);
-        
-        // Update command usage stats
-        const commandsUsed = user.stats?.commandsUsed || [];
-        const commandIndex = commandsUsed.findIndex((c: any) => c.command === commandName);
-        
+
+        const commandsUsed = [...(user.stats?.commandsUsed ?? [])];
+        const commandIndex = commandsUsed.findIndex((c) => c.command === commandName);
         if (commandIndex >= 0) {
-            commandsUsed[commandIndex].count++;
+            commandsUsed[commandIndex] = { ...commandsUsed[commandIndex], count: commandsUsed[commandIndex].count + 1 };
         } else {
             commandsUsed.push({ command: commandName, count: 1 });
         }
-        
-        // Update user
-        const updatedUser = await this.prisma.user.update({
-            where: { userId },
-            data: {
-                level: {
-                    level: result.newLevel,
-                    xp: result.newXp,
-                    totalXp: result.newTotalXp,
-                },
-                stats: {
-                    totalCommands: (user.stats?.totalCommands || 0) + 1,
-                    commandsUsed,
-                    lastCommandTime: Math.floor(Date.now() / 1000),
-                    joinedAt: user.stats?.joinedAt || Math.floor(Date.now() / 1000),
-                },
+
+        const updatedUser = await this.adapters.user.updateUser(userId, {
+            level: { level: result.newLevel, xp: result.newXp, totalXp: result.newTotalXp },
+            stats: {
+                totalCommands: (user.stats?.totalCommands ?? 0) + 1,
+                commandsUsed,
+                lastCommandTime: Math.floor(Date.now() / 1000),
+                joinedAt: user.stats?.joinedAt ?? Math.floor(Date.now() / 1000),
             },
         });
-        
-        cacheService.delete(cacheKey);
-        
+
+        this.cache.delete(`user:${userId}`);
+
         return {
             user: updatedUser,
             leveledUp: result.leveledUp,
@@ -231,184 +189,112 @@ class DatabaseService {
         };
     }
 
-    public async getAllUsers(): Promise<PrismaUser[]> {
-        return this.prisma.user.findMany();
-    }
+    // ─── Group ───────────────────────────────────────────────────────────────
 
-    /**
-     * Group Operations
-     */
-    public async getGroup(groupId: string): Promise<PrismaGroup | null> {
+    public async getGroup(groupId: string): Promise<GroupRecord | null> {
         const cacheKey = `group:${groupId}`;
-
-        return cacheService.getOrSet(
+        return this.cache.getOrSet(
             cacheKey,
-            () => this.prisma.group.findUnique({ where: { groupId } }),
+            () => this.adapters.group.getGroup(groupId),
             this.CACHE_TTL.GROUP
         );
     }
 
-    public async upsertGroup(
-        groupId: string,
-        groupData: any
-    ): Promise<PrismaGroup> {
-        const cacheKey = `group:${groupId}`;
-
-        const settings = groupData.settings || {};
-        settings.antilink = settings.antilink || {};
-        
-        const validData: any = {
-            subject: groupData.subject || "",
-            subjectOwnerPn: groupData.subjectOwnerPn || null,
-            addressingMode: groupData.addressingMode || null,
-            size: groupData.size || groupData.participants?.length || 0,
-            creation: groupData.creation || 0,
-            owner: groupData.owner || null,
-            ownerPn: groupData.ownerPn || null,
-            owner_country_code: groupData.owner_country_code || null,
-            desc: groupData.desc || null,
-            descOwner: groupData.descOwner || null,
-            descOwnerPn: groupData.descOwnerPn || null,
-            descTime: groupData.descTime || null,
-            linkedParent: groupData.linkedParent || null,
-            joinApprovalMode: groupData.joinApprovalMode || false,
-            restrict: groupData.restrict || false,
-            announce: groupData.announce || false,
-            isCommunity: groupData.isCommunity || false,
-            isCommunityAnnounce: groupData.isCommunityAnnounce || false,
-            memberAddMode: groupData.memberAddMode ?? true,
-            participants: groupData.participants || [],
-            ephemeralDuration: groupData.ephemeralDuration || 0,
-            settings: {
-                notify: settings.notify ?? false,
-                welcome: settings.welcome ?? true,
-                leave: settings.leave ?? true,
-                mute: settings.mute ?? false,
-                antilink: {
-                    status: settings.antilink.status ?? false,
-                    mode: settings.antilink.mode || "kick",
-                    list: settings.antilink.list || ["whatsapp"]
-                },
-                antibot: settings.antibot ?? false,
-                banned: settings.banned || []
-            }
-        };
-
-        const group = await this.prisma.group.upsert({
-            where: { groupId },
-            create: { groupId, ...validData },
-            update: validData,
-        });
-
-        cacheService.set(cacheKey, group, this.CACHE_TTL.GROUP);
+    public async upsertGroup(groupId: string, groupData: any): Promise<GroupRecord> {
+        const group = await this.adapters.group.upsertGroup(groupId, groupData);
+        this.cache.set(`group:${groupId}`, group, this.CACHE_TTL.GROUP);
         return group;
     }
 
-    public async updateGroup(groupId: string, data: any): Promise<PrismaGroup> {
-        const cacheKey = `group:${groupId}`;
-
-        if (data?.groupMetadata) {
-            const group = await this.upsertGroup(groupId, data.groupMetadata);
-            cacheService.set(cacheKey, group, this.CACHE_TTL.GROUP);
-            return group;
-        }
-
-        const cleanData: any = {};
-        for (const key in data) {
-            if (data[key] !== undefined) {
-                cleanData[key] = data[key];
-            }
-        }
-
-        const group = await this.prisma.group.update({
-            where: { groupId },
-            data: cleanData,
-        });
-
-        cacheService.delete(cacheKey);
+    public async updateGroup(groupId: string, data: any): Promise<GroupRecord> {
+        const group = await this.adapters.group.updateGroup(groupId, data);
+        this.cache.delete(`group:${groupId}`);
         return group;
     }
 
-    public async updateGroupSettings(
-        groupId: string,
-        settings: any
-    ): Promise<PrismaGroup> {
-        const cacheKey = `group:${groupId}`;
-
-        const group = await this.prisma.group.update({
-            where: { groupId },
-            data: {
-                settings: {
-                    update: settings,
-                },
-            },
-        });
-
-        cacheService.delete(cacheKey);
+    public async updateGroupSettings(groupId: string, settings: any): Promise<GroupRecord> {
+        const group = await this.adapters.group.updateGroupSettings(groupId, settings);
+        this.cache.delete(`group:${groupId}`);
         return group;
     }
 
-    public async deleteGroup(groupId: string): Promise<PrismaGroup> {
-        const cacheKey = `group:${groupId}`;
-
-        const group = await this.prisma.group.delete({
-            where: { groupId },
-        });
-
-        cacheService.delete(cacheKey);
+    public async deleteGroup(groupId: string): Promise<GroupRecord> {
+        const group = await this.adapters.group.deleteGroup(groupId);
+        this.cache.delete(`group:${groupId}`);
         return group;
     }
 
-    public async getGroupCount(): Promise<number> {
-        return this.prisma.group.count();
+    public async getGroupCount(filter?: GroupFilter): Promise<number> {
+        return this.adapters.group.getGroupCount(filter);
     }
 
-    public async getAllGroups(): Promise<PrismaGroup[]> {
-        return this.prisma.group.findMany();
+    public async getAllGroups(): Promise<GroupRecord[]> {
+        return this.adapters.group.getAllGroups();
     }
 
-    /**
-     * Batch Operations for Performance
-     */
-    public async batchUpdateUsers(
-        updates: Array<{ userId: string; data: any }>
-    ): Promise<void> {
+    public async findGroups(filter: GroupFilter): Promise<PaginatedResult<GroupRecord>> {
+        return this.adapters.group.findGroups(filter);
+    }
+
+    // ─── Admin ───────────────────────────────────────────────────────────────
+
+    public async getAdminById(id: string): Promise<AdminRecord | null> {
+        return this.adapters.admin.getAdminById(id);
+    }
+
+    public async findAdminByUsername(username: string): Promise<AdminRecord | null> {
+        return this.adapters.admin.findAdminByUsername(username);
+    }
+
+    public async findAdminByPhoneNumber(phoneNumber: string): Promise<AdminRecord | null> {
+        return this.adapters.admin.findAdminByPhoneNumber(phoneNumber);
+    }
+
+    public async createAdmin(data: { phoneNumber: string; username: string; password: string }): Promise<AdminRecord> {
+        return this.adapters.admin.createAdmin(data);
+    }
+
+    public async updateAdmin(id: string, data: Partial<AdminRecord>): Promise<AdminRecord> {
+        return this.adapters.admin.updateAdmin(id, data);
+    }
+
+    public async deleteAdmin(username: string): Promise<AdminRecord> {
+        return this.adapters.admin.deleteAdmin(username);
+    }
+
+    public async getAllAdmins(): Promise<SafeAdminRecord[]> {
+        return this.adapters.admin.getAllAdmins();
+    }
+
+    // ─── Session ─────────────────────────────────────────────────────────────
+
+    public async getSession(sessionId: string): Promise<SessionRecord | null> {
+        return this.adapters.session.getSession(sessionId);
+    }
+
+    public async setSession(sessionId: string, session: string): Promise<SessionRecord> {
+        return this.adapters.session.setSession(sessionId, session);
+    }
+
+    public async deleteSession(sessionId: string): Promise<void> {
+        return this.adapters.session.deleteSession(sessionId);
+    }
+
+    // ─── Batch ───────────────────────────────────────────────────────────────
+
+    public async batchUpdateUsers(updates: Array<{ userId: string; data: any }>): Promise<void> {
         for (const { userId, data } of updates) {
-            const cacheKey = `user:${userId}`;
-            cacheService.delete(cacheKey);
-            await this.prisma.user.update({ where: { userId }, data });
+            this.cache.delete(`user:${userId}`);
+            await this.adapters.user.updateUser(userId, data);
         }
     }
 
-    /**
-     * Reset daily limits
-     */
-    public async resetUserLimits(limit: number): Promise<void> {
-        await this.prisma.user.updateMany({
-            where: {
-                userId: {
-                    contains: "@s.whatsapp.net",
-                },
-                role: {
-                    in: ["free"],
-                },
-            },
-            data: {
-                limit,
-            },
-        });
+    // ─── Lifecycle ───────────────────────────────────────────────────────────
 
-        logger.info("User limits reset, clearing user cache");
-    }
-
-    /**
-     * Cleanup and disconnect
-     */
     public async disconnect(): Promise<void> {
-        await this.prisma.$disconnect();
+        if (this.adapters.disconnect) await this.adapters.disconnect();
         logger.info("Database disconnected");
     }
 }
 
 export const databaseService = DatabaseService.getInstance();
-export const Database = databaseService.getPrismaClient();

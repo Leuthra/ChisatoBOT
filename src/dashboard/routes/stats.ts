@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { Database } from "../../infrastructure/database";
+import { databaseService } from "../../infrastructure/database";
 
 export async function statsRoutes(fastify: FastifyInstance) {
     // Get overall statistics
@@ -7,28 +7,21 @@ export async function statsRoutes(fastify: FastifyInstance) {
         try {
             const [totalUsers, totalGroups, premiumUsers, bannedUsers, groups] =
                 await Promise.all([
-                    Database.user.count(),
-                    Database.group.count(),
-                    Database.user.count({ where: { role: "premium" } }),
-                    Database.user.count({ where: { isBanned: true } }),
-                    Database.group.findMany({
-                        select: {
-                            participants: true,
-                        },
-                    }),
+                    databaseService.getUserCount(),
+                    databaseService.getGroupCount(),
+                    databaseService.getUserCount({ role: "premium" }),
+                    databaseService.getUserCount({ isBanned: true }),
+                    databaseService.getAllGroups(),
                 ]);
 
-            // Calculate uptime
             const uptime = process.uptime();
             const uptimeString = formatUptime(uptime);
 
-            // Calculate total participants across all groups
             const totalParticipants = groups.reduce(
-                (sum, group) => sum + (group.participants?.length || 0),
+                (sum, group) => sum + (group.participants?.length ?? 0),
                 0
             );
 
-            // Get active groups (groups with settings enabled)
             const activeGroups = groups.filter(
                 (g) => g.participants && g.participants.length > 0
             ).length;
@@ -53,21 +46,8 @@ export async function statsRoutes(fastify: FastifyInstance) {
     fastify.get("/growth", async (request, reply) => {
         try {
             const [users, groups] = await Promise.all([
-                Database.user.findMany({
-                    select: {
-                        userId: true,
-                        role: true,
-                        limit: true,
-                    },
-                }),
-                Database.group.findMany({
-                    select: {
-                        groupId: true,
-                        subject: true,
-                        size: true,
-                        settings: true,
-                    },
-                }),
+                databaseService.getAllUsers(),
+                databaseService.getAllGroups(),
             ]);
 
             const roleStats = users.reduce((acc, user) => {
@@ -84,22 +64,16 @@ export async function statsRoutes(fastify: FastifyInstance) {
             };
 
             groups.forEach((group) => {
-                if (group.settings.antilink?.status) settingsStats.antilink++;
-                if (group.settings.antibot) settingsStats.antibot++;
-                if (group.settings.welcome) settingsStats.welcome++;
-                if (group.settings.notify) settingsStats.notify++;
-                if (group.settings.mute) settingsStats.mute++;
+                if (group.settings?.antilink?.status) settingsStats.antilink++;
+                if (group.settings?.antibot) settingsStats.antibot++;
+                if (group.settings?.welcome) settingsStats.welcome++;
+                if (group.settings?.notify) settingsStats.notify++;
+                if (group.settings?.mute) settingsStats.mute++;
             });
 
             return {
-                users: {
-                    total: users.length,
-                    byRole: roleStats,
-                },
-                groups: {
-                    total: groups.length,
-                    settingsEnabled: settingsStats,
-                },
+                users: { total: users.length, byRole: roleStats },
+                groups: { total: groups.length, settingsEnabled: settingsStats },
             };
         } catch (error) {
             reply.status(500).send({ error: "Failed to fetch growth data" });

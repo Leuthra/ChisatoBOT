@@ -1,6 +1,6 @@
 import type { ConfigCommands } from "../../types/structure/commands";
 import bcrypt from "bcrypt";
-import { Database } from "../../infrastructure/database";
+import { databaseService } from "../../infrastructure/database";
 
 const SALT_ROUNDS = 10;
 
@@ -62,9 +62,7 @@ export default {
             switch (choice) {
                 case "1": {
                     const phoneNumber = userId.split("@")[0];
-                    const existingByPhone = await Database.admin.findFirst({
-                        where: { phoneNumber },
-                    });
+                    const existingByPhone = await databaseService.findAdminByPhoneNumber(phoneNumber);
 
                     if (existingByPhone) {
                         await Chisato.sendMessage(from, {
@@ -125,16 +123,7 @@ export default {
                 }
                 case "4": {
                     try {
-                        const admins = await Database.admin.findMany({
-                            select: {
-                                phoneNumber: true,
-                                username: true,
-                                createdAt: true,
-                            },
-                            orderBy: {
-                                createdAt: "asc",
-                            },
-                        });
+                        const admins = await databaseService.getAllAdmins();
 
                         if (admins.length === 0) {
                             await Chisato.sendMessage(from, {
@@ -226,9 +215,7 @@ async function handleCreateSession(Chisato: any, msg: any, from: string, userId:
             return;
         }
 
-        const existingByUsername = await Database.admin.findFirst({
-            where: { username: input },
-        });
+        const existingByUsername = await databaseService.findAdminByUsername(input);
 
         if (existingByUsername) {
             await Chisato.sendMessage(from, {
@@ -266,12 +253,10 @@ async function handleCreateSession(Chisato: any, msg: any, from: string, userId:
 
         const hashedPassword = await bcrypt.hash(input, SALT_ROUNDS);
 
-        await Database.admin.create({
-            data: {
-                phoneNumber: session.data.phoneNumber!,
-                username: session.data.username!,
-                password: hashedPassword,
-            },
+        await databaseService.createAdmin({
+            phoneNumber: session.data.phoneNumber!,
+            username: session.data.username!,
+            password: hashedPassword,
         });
 
         sessions.delete(userId);
@@ -292,9 +277,7 @@ async function handleCreateSession(Chisato: any, msg: any, from: string, userId:
 // Handler for reset password session
 async function handleResetSession(Chisato: any, msg: any, from: string, userId: string, session: any, input: string) {
     if (session.step === 1) {
-        const admin = await Database.admin.findUnique({
-            where: { username: input },
-        });
+        const admin = await databaseService.findAdminByUsername(input);
 
         if (!admin) {
             await Chisato.sendMessage(from, {
@@ -331,10 +314,10 @@ async function handleResetSession(Chisato: any, msg: any, from: string, userId: 
 
         const hashedPassword = await bcrypt.hash(input, SALT_ROUNDS);
 
-        await Database.admin.update({
-            where: { username: session.data.username! },
-            data: { password: hashedPassword },
-        });
+        const adminToUpdate = await databaseService.findAdminByUsername(session.data.username!);
+        if (adminToUpdate) {
+            await databaseService.updateAdmin(adminToUpdate.id, { password: hashedPassword });
+        }
 
         sessions.delete(userId);
 
@@ -350,9 +333,7 @@ async function handleResetSession(Chisato: any, msg: any, from: string, userId: 
 
 // Handler for delete admin session
 async function handleDeleteSession(Chisato: any, msg: any, from: string, userId: string, session: any, input: string) {
-    const admin = await Database.admin.findUnique({
-        where: { username: input },
-    });
+    const admin = await databaseService.findAdminByUsername(input);
 
     if (!admin) {
         await Chisato.sendMessage(from, {
@@ -363,9 +344,7 @@ async function handleDeleteSession(Chisato: any, msg: any, from: string, userId:
         return;
     }
 
-    await Database.admin.delete({
-        where: { username: input },
-    });
+    await databaseService.deleteAdmin(input);
 
     sessions.delete(userId);
 

@@ -1,5 +1,6 @@
-import { AntilinkList } from "@prisma/client";
 import type { ConfigCommands } from "../../types/structure/commands";
+
+type AntilinkList = "youtube" | "instagram" | "facebook" | "whatsapp" | "twitter" | "tiktok" | "all";
 
 export default {
     name: "antilink",

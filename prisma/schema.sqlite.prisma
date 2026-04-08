@@ -1,0 +1,74 @@
+// SQLite schema for ChisatoBOT
+// Usage:
+//   1. Copy this file to prisma/schema.prisma (overwriting the MongoDB schema)
+//   2. Set DATABASE_URL=file:./data/chisato.db in .env
+//   3. Set DB_PROVIDER=sqlite in .env
+//   4. Run: npx prisma migrate dev --name init
+//
+// Great for local development and lightweight single-instance self-hosting.
+// Embedded types (Settings, Afk, Level, etc.) are stored as JSON strings.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Group {
+  id                  String   @id @default(uuid())
+  groupId             String   @unique
+  subject             String
+  subjectOwnerPn      String?
+  addressingMode      String?
+  size                Int
+  creation            Int
+  owner               String?
+  ownerPn             String?
+  owner_country_code  String?
+  desc                String?
+  descOwner           String?
+  descOwnerPn         String?
+  descTime            Int?
+  linkedParent        String?
+  joinApprovalMode    Boolean? @default(false)
+  restrict            Boolean
+  announce            Boolean
+  isCommunity         Boolean
+  isCommunityAnnounce Boolean
+  memberAddMode       Boolean
+  participants        String   @default("[]")
+  ephemeralDuration   Int?     @default(0)
+  settings            String
+}
+
+model User {
+  id       String  @id @default(uuid())
+  userId   String  @unique
+  name     String?
+  limit    Int
+  role     String  @default("free")
+  expired  Int     @default(0)
+  isBanned Boolean @default(false)
+  afk      String
+  level    String?
+  stats    String?
+}
+
+model Session {
+  id        String  @id @default(uuid())
+  sessionId String  @unique
+  session   String?
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  phoneNumber  String   @unique
+  username     String   @unique
+  password     String
+  lastActivity DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { verifyToken } from "../routes/auth";
-import { Database } from "../../infrastructure/database";
+import { databaseService } from "../../infrastructure/database";
 
 // Session expires after 30 minutes of inactivity
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -49,9 +49,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
 
     // Check session expiry based on lastActivity
     try {
-        const admin = await Database.admin.findUnique({
-            where: { id: decoded.id },
-        });
+        const admin = await databaseService.getAdminById(decoded.id);
 
         if (!admin) {
             return reply.status(401).send({
@@ -71,10 +69,7 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
         }
 
         // Update last activity timestamp
-        await Database.admin.update({
-            where: { id: admin.id },
-            data: { lastActivity: new Date() },
-        });
+        await databaseService.updateAdmin(admin.id, { lastActivity: new Date() });
 
         // Attach user info to request
         (request as any).admin = decoded;
