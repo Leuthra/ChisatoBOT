@@ -18,6 +18,8 @@ interface WarmUpState {
     lastCountDate: string | null; // YYYY-MM-DD of the last count reset
 }
 
+const MS_PER_DAY = 86_400_000;
+
 function todayKey(): string {
     return new Date().toISOString().slice(0, 10);
 }
@@ -99,7 +101,7 @@ export class WarmUp {
     private elapsedDays(): number {
         const start = new Date(this.state.startDate).getTime();
         const nowMs = Date.now();
-        return Math.floor((nowMs - start) / 86_400_000);
+        return Math.floor((nowMs - start) / MS_PER_DAY);
     }
 
     private resetCounterIfNewDay(): void {

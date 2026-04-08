@@ -73,7 +73,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
     private package: any;
     private time: string;
     private socketConfig: SocketConfig;
-    private antiban = getAntiBan();
+    private antiban: ReturnType<typeof getAntiBan>;
     constructor(socketConfig: SocketConfig) {
         super();
         this.config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
@@ -81,9 +81,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
         this.socketConfig = socketConfig;
         // Initialise AntiBan with settings from config if provided
         const ab = (this.config as any).antiban;
-        if (ab) {
-            this.antiban = getAntiBan(ab);
-        }
+        this.antiban = getAntiBan(ab ?? {});
         moment.tz.setDefault(this.config.timezone);
         this.time = moment().format("DD/MM HH:mm:ss");
         this.readcommands();
@@ -466,7 +464,9 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                 const textContent =
                     typeof content?.text === "string"
                         ? content.text
-                        : JSON.stringify(content);
+                        : typeof content?.caption === "string"
+                        ? content.caption
+                        : `[${Object.keys(content ?? {}).join(",")}]`;
                 const decision = this.antiban.beforeSend(jid, textContent);
                 if (!decision.allowed) {
                     this.log(

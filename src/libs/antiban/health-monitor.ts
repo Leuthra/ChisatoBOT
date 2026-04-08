@@ -9,6 +9,8 @@ const EVENT_WEIGHTS: Record<string, number> = {
     sendFailed: 3,
 };
 
+const MS_PER_MINUTE = 60_000;
+
 /** Risk level thresholds */
 const THRESHOLDS: Record<RiskLevel, number> = {
     low: 0,
@@ -96,12 +98,12 @@ export class HealthMonitor {
 
     private applyDecay(): void {
         const now = Date.now();
-        const minutesElapsed = (now - this.lastDecayTs) / 60_000;
+        const minutesElapsed = (now - this.lastDecayTs) / MS_PER_MINUTE;
         if (minutesElapsed >= 1) {
             const decay = Math.floor(minutesElapsed) * DECAY_PER_MINUTE;
             this.score = Math.max(0, this.score - decay);
             this.lastDecayTs =
-                now - ((minutesElapsed % 1) * 60_000);
+                now - ((minutesElapsed % 1) * MS_PER_MINUTE);
             if (this.paused && this.computeLevel() === "low") {
                 this.paused = false;
             }

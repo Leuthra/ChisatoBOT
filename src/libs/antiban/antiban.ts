@@ -166,6 +166,12 @@ export class AntiBan {
 /** Singleton instance — shared across the whole process */
 let instance: AntiBan | null = null;
 
+/**
+ * Returns the process-wide singleton AntiBan instance.
+ * The `cfg` parameter is only used on the FIRST call; subsequent calls return
+ * the already-initialised instance regardless of the arguments passed.
+ * To change the configuration at runtime use the `AntiBan` class directly.
+ */
 export function getAntiBan(cfg?: Partial<AntiBanConfig>): AntiBan {
     if (!instance) {
         instance = new AntiBan(cfg);

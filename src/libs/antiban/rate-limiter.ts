@@ -28,6 +28,9 @@ const DEFAULT_CONFIG: RateLimiterConfig = {
     maxDelayMs: 4000,
 };
 
+const RATE_LIMIT_BUFFER_MS = 100;
+const MAX_TYPING_DELAY_MS = 3000;
+
 /** Box-Muller transform — produces value roughly in [0, 1] centred on 0.5 */
 function gaussianRandom(): number {
     let u = 0;
@@ -68,17 +71,17 @@ export class RateLimiter {
         // ── 1. Window limit checks ──────────────────────────────────────────
         if (this.minuteWindow.length >= this.cfg.maxPerMinute) {
             const oldest = this.minuteWindow[0];
-            const waitMs = 60_000 - (now - oldest) + 100;
+            const waitMs = 60_000 - (now - oldest) + RATE_LIMIT_BUFFER_MS;
             return { allowed: false, delayMs: waitMs, reason: "rate:minute" };
         }
         if (this.hourWindow.length >= this.cfg.maxPerHour) {
             const oldest = this.hourWindow[0];
-            const waitMs = 3_600_000 - (now - oldest) + 100;
+            const waitMs = 3_600_000 - (now - oldest) + RATE_LIMIT_BUFFER_MS;
             return { allowed: false, delayMs: waitMs, reason: "rate:hour" };
         }
         if (this.dayWindow.length >= this.cfg.maxPerDay) {
             const oldest = this.dayWindow[0];
-            const waitMs = 86_400_000 - (now - oldest) + 100;
+            const waitMs = 86_400_000 - (now - oldest) + RATE_LIMIT_BUFFER_MS;
             return { allowed: false, delayMs: waitMs, reason: "rate:day" };
         }
 
@@ -105,7 +108,7 @@ export class RateLimiter {
         // Typing simulation: scale by content length
         const typingDelay = Math.min(
             content.length * this.cfg.typingMsPerChar,
-            3000
+            MAX_TYPING_DELAY_MS
         );
         delayMs += typingDelay;
 
