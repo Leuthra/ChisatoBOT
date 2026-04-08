@@ -453,6 +453,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         let activeGroups = 0;
 
         for (const group of groups) {
+            // Older JSON stores may omit size or store it incorrectly, so fallback to participants length.
             const size = typeof group.size === "number"
                 ? group.size
                 : group.participants?.length ?? 0;
