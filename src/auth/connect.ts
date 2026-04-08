@@ -11,6 +11,7 @@ import { logger } from "../core/logger";
 import { configService } from "../core/config";
 import { databaseService } from "../infrastructure/database";
 import { DashboardServer } from "../dashboard/server";
+import { getAntiBan } from "../libs/antiban/antiban";
 
 // Initialize services
 logger.connect("Initializing ChisatoBOT v2.0...");
@@ -30,6 +31,13 @@ try {
 
 // Initialize database
 logger.connect("Connecting to database...");
+
+// Initialise AntiBan with config values (loads persisted warm-up / timelock state)
+const botConfig = configService.getConfig();
+const antiBan = getAntiBan(botConfig.antiban);
+logger.connect(
+    `AntiBan initialised — enabled: ${botConfig.antiban?.enabled ?? true}`
+);
 
 (async () => {
     try {
@@ -111,12 +119,14 @@ logger.connect("Connecting to database...");
         // Graceful shutdown
         process.on("SIGINT", async () => {
             logger.info("Shutting down gracefully...");
+            antiBan.save();
             await databaseService.disconnect();
             process.exit(0);
         });
 
         process.on("SIGTERM", async () => {
             logger.info("Shutting down gracefully...");
+            antiBan.save();
             await databaseService.disconnect();
             process.exit(0);
         });

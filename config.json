@@ -25,6 +25,14 @@
     "limit": {
         "command": 30
     },
+    "antiban": {
+        "enabled": true,
+        "maxPerMinute": 8,
+        "maxPerHour": 200,
+        "maxPerDay": 1500,
+        "warmUpDays": 7,
+        "autoPauseAt": "high"
+    },
     "cfonts": {
         "font": "block",
         "align": "center",

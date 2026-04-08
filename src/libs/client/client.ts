@@ -43,6 +43,9 @@ import { StickerGenerator, StickerType } from "../../utils/converter/sticker";
 /** Extensions */
 import "../../shared/extensions/string.extensions";
 
+/** AntiBan */
+import { getAntiBan } from "../antiban/antiban";
+
 /** Livs */
 import { User as UserDatabase, Group as GroupDatabase } from "../database";
 
@@ -70,11 +73,17 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
     private package: any;
     private time: string;
     private socketConfig: SocketConfig;
+    private antiban = getAntiBan();
     constructor(socketConfig: SocketConfig) {
         super();
         this.config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
         this.package = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
         this.socketConfig = socketConfig;
+        // Initialise AntiBan with settings from config if provided
+        const ab = (this.config as any).antiban;
+        if (ab) {
+            this.antiban = getAntiBan(ab);
+        }
         moment.tz.setDefault(this.config.timezone);
         this.time = moment().format("DD/MM HH:mm:ss");
         this.readcommands();
@@ -144,6 +153,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             } else if (connection === "close") {
                 let reason = new Boom(lastDisconnect?.error)?.output
                     ?.statusCode;
+                this.antiban.onDisconnect(reason);
                 switch (reason) {
                     case DisconnectReason.restartRequired:
                         {
@@ -305,6 +315,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                 }
             } else if (connection === "open") {
                 tryConnect = 0;
+                this.antiban.onReconnect();
 
                 /** Logger */
                 const userName = this.user?.name || "WhatsApp BOT";
@@ -443,6 +454,42 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
 
             return originalRelayMessage(jid, message, opts);
         };
+
+        // ── AntiBan: wrap sendMessage ──────────────────────────────────────
+        const originalSendMessage = (this as any).sendMessage?.bind(this);
+        if (originalSendMessage) {
+            (this as any).sendMessage = async (
+                jid: string,
+                content: any,
+                opts?: any
+            ) => {
+                const textContent =
+                    typeof content?.text === "string"
+                        ? content.text
+                        : JSON.stringify(content);
+                const decision = this.antiban.beforeSend(jid, textContent);
+                if (!decision.allowed) {
+                    this.log(
+                        "info",
+                        `[AntiBan] Send blocked — ${decision.reason ?? "rate limited"}`
+                    );
+                    return undefined;
+                }
+                if (decision.delayMs > 0) {
+                    await new Promise((r) => setTimeout(r, decision.delayMs));
+                }
+                try {
+                    const result = await originalSendMessage(jid, content, opts);
+                    this.antiban.afterSend(jid, textContent);
+                    return result;
+                } catch (err: any) {
+                    const code: number | undefined =
+                        err?.output?.statusCode ?? err?.statusCode;
+                    this.antiban.afterSendFailed(code);
+                    throw err;
+                }
+            };
+        }
     }
 
     /** Read All Commands  */
