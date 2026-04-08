@@ -148,7 +148,7 @@ class DatabaseService {
     public async resetUserLimits(limit: number): Promise<void> {
         await this.adapters.user.resetUserLimits(limit);
         this.cache.clear();
-        logger.info("User limits reset, all cache cleared");
+        logger.info("User limits reset, cache cleared");
     }
 
     // ─── Leveling ────────────────────────────────────────────────────────────

@@ -18,12 +18,12 @@ export async function statsRoutes(fastify: FastifyInstance) {
             const uptimeString = formatUptime(uptime);
 
             const totalParticipants = groups.reduce(
-                (sum, group) => sum + getParticipantCount(group),
+                (sum, group) => sum + safeParticipantCount(group),
                 0
             );
 
             const activeGroups = groups.filter(
-                (g) => getParticipantCount(g) > 0
+                (g) => safeParticipantCount(g) > 0
             ).length;
 
             return {
@@ -119,7 +119,7 @@ function formatUptime(seconds: number): string {
 }
 
 // Safe access to participants length when the array is optional or null.
-function getParticipantCount(group: { participants?: Array<unknown> | null }): number {
+function safeParticipantCount(group: { participants?: Array<unknown> | null }): number {
     return group.participants?.length ?? 0;
 }
 
