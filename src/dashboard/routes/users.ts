@@ -148,6 +148,18 @@ export async function usersRoutes(fastify: FastifyInstance) {
         try {
             const users = await databaseService.getAllUsers();
             const now = Date.now();
+            let totalLimit = 0;
+            let maxLimit = 0;
+            let minLimit = 0;
+
+            if (users.length) {
+                minLimit = users[0].limit;
+                for (const user of users) {
+                    totalLimit += user.limit;
+                    if (user.limit > maxLimit) maxLimit = user.limit;
+                    if (user.limit < minLimit) minLimit = user.limit;
+                }
+            }
 
             const stats = {
                 totalUsers: users.length,
@@ -168,9 +180,9 @@ export async function usersRoutes(fastify: FastifyInstance) {
                 },
                 limits: users.length
                     ? {
-                        average: users.reduce((sum, u) => sum + u.limit, 0) / users.length,
-                        max: Math.max(...users.map((u) => u.limit)),
-                        min: Math.min(...users.map((u) => u.limit)),
+                        average: totalLimit / users.length,
+                        max: maxLimit,
+                        min: minLimit,
                     }
                     : { average: 0, max: 0, min: 0 },
             };

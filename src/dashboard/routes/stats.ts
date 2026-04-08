@@ -118,6 +118,7 @@ function formatUptime(seconds: number): string {
     return parts.join(" ");
 }
 
+// Safe participant count helper for optional/null participants arrays.
 function getParticipantCount(group: { participants?: Array<unknown> | null }): number {
     return group.participants?.length ?? 0;
 }
