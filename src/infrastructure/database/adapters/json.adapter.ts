@@ -128,6 +128,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
     private safeAssign<T extends object>(target: T, source: Partial<T>): T {
         for (const key of Object.keys(source)) {
             if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+            if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
             (target as any)[key] = (source as any)[key];
         }
         return target;
