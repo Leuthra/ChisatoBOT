@@ -315,9 +315,17 @@ async function handleResetSession(Chisato: any, msg: any, from: string, userId: 
         const hashedPassword = await bcrypt.hash(input, SALT_ROUNDS);
 
         const adminToUpdate = await databaseService.findAdminByUsername(session.data.username!);
-        if (adminToUpdate) {
-            await databaseService.updateAdmin(adminToUpdate.id, { password: hashedPassword });
+        if (!adminToUpdate) {
+            sessions.delete(userId);
+            await Chisato.sendMessage(from, {
+                text: `❌ Admin account not found!\n\n` +
+                    `The account "${session.data.username}" no longer exists.\n\n` +
+                    `Please try again or reply "cancel" to abort.`,
+            }, { quoted: msg });
+            return;
         }
+
+        await databaseService.updateAdmin(adminToUpdate.id, { password: hashedPassword });
 
         sessions.delete(userId);
 

@@ -117,11 +117,15 @@ export async function groupsRoutes(fastify: FastifyInstance) {
                     (sum, g) => sum + (g.participants?.length ?? 0),
                     0
                 ),
-                averageSize:
-                    groups.reduce((sum, g) => sum + (g.participants?.length ?? 0), 0) /
-                        groups.length || 0,
-                largestGroup: Math.max(...groups.map((g) => g.participants?.length ?? 0), 0),
-                smallestGroup: Math.min(...groups.map((g) => g.participants?.length ?? 0), 0),
+                averageSize: groups.length
+                    ? groups.reduce((sum, g) => sum + (g.participants?.length ?? 0), 0) / groups.length
+                    : 0,
+                largestGroup: groups.length
+                    ? Math.max(...groups.map((g) => g.participants?.length ?? 0))
+                    : 0,
+                smallestGroup: groups.length
+                    ? Math.min(...groups.map((g) => g.participants?.length ?? 0))
+                    : 0,
                 settings: {
                     antilink: groups.filter((g) => g.settings?.antilink?.status).length,
                     antibot: groups.filter((g) => g.settings?.antibot).length,

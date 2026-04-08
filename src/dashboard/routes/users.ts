@@ -166,12 +166,13 @@ export async function usersRoutes(fastify: FastifyInstance) {
                 afk: {
                     total: users.filter((u) => u.afk?.status).length,
                 },
-                limits: {
-                    average:
-                        users.reduce((sum, u) => sum + u.limit, 0) / users.length || 0,
-                    max: Math.max(...users.map((u) => u.limit), 0),
-                    min: Math.min(...users.map((u) => u.limit), 0),
-                },
+                limits: users.length
+                    ? {
+                        average: users.reduce((sum, u) => sum + u.limit, 0) / users.length,
+                        max: Math.max(...users.map((u) => u.limit)),
+                        min: Math.min(...users.map((u) => u.limit)),
+                    }
+                    : { average: 0, max: 0, min: 0 },
             };
 
             return stats;
@@ -260,4 +261,3 @@ export async function usersRoutes(fastify: FastifyInstance) {
         }
     });
 }
-
