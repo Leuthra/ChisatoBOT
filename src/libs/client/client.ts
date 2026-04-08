@@ -26,6 +26,7 @@ import util from "util";
 
 /** Config */
 import { commands } from "./commands";
+import { BotConfig } from "../../core/config/config.service";
 
 /** Types */
 import type { SocketConfig } from "../../types/auth/socket";
@@ -42,6 +43,9 @@ import { StickerGenerator, StickerType } from "../../utils/converter/sticker";
 
 /** Extensions */
 import "../../shared/extensions/string.extensions";
+
+/** AntiBan */
+import { getAntiBan } from "../antiban/antiban";
 
 /** Livs */
 import { User as UserDatabase, Group as GroupDatabase } from "../database";
@@ -66,16 +70,26 @@ async function getBaileys() {
 }
 
 export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>) {
-    private config: Config;
+    private config: BotConfig;
     private package: any;
     private time: string;
     private socketConfig: SocketConfig;
+    private antiban: ReturnType<typeof getAntiBan>;
+    /**
+     * True while the antiban-wrapped sendMessage is executing its inner send.
+     * Used to prevent the relayMessage wrapper from running a second antiban
+     * check for messages that already went through the sendMessage wrapper.
+     */
+    private _antibanSendActive = false;
     constructor(socketConfig: SocketConfig) {
         super();
         this.config = JSON.parse(fs.readFileSync("./config.json", "utf-8"));
         this.package = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
         this.socketConfig = socketConfig;
-        moment.tz.setDefault(this.config.timezone);
+        // Initialise AntiBan with settings from config if provided
+        const ab = this.config.antiban;
+        this.antiban = getAntiBan(ab ?? {});
+        moment.tz.setDefault(this.config.timeZone);
         this.time = moment().format("DD/MM HH:mm:ss");
         this.readcommands();
     }
@@ -144,6 +158,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             } else if (connection === "close") {
                 let reason = new Boom(lastDisconnect?.error)?.output
                     ?.statusCode;
+                this.antiban.onDisconnect(reason);
                 switch (reason) {
                     case DisconnectReason.restartRequired:
                         {
@@ -305,6 +320,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                 }
             } else if (connection === "open") {
                 tryConnect = 0;
+                this.antiban.onReconnect();
 
                 /** Logger */
                 const userName = this.user?.name || "WhatsApp BOT";
@@ -380,7 +396,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             "messaging-history.set",
             "chats.upsert",
             "chats.update",
-            "chats.phoneNumberShare",
+            "lid-mapping.update",
             "chats.delete",
             "presence.update",
             "contacts.upsert",
@@ -394,6 +410,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
             "groups.upsert",
             "groups.update",
             "group-participants.update",
+            "group.join-request",
             "blocklist.set",
             "blocklist.update",
             // 'call',
@@ -441,8 +458,77 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
                 opts = { ...opts, additionalNodes };
             }
 
+            // ── AntiBan guard for direct relayMessage calls (e.g. sendButton) ──
+            // When _antibanSendActive is true, sendMessage wrapper has already
+            // performed the check — skip to avoid double-counting.
+            if (!this._antibanSendActive) {
+                const content = "[relay]";
+                const decision = this.antiban.beforeSend(jid, content);
+                if (!decision.allowed) {
+                    this.log(
+                        "info",
+                        `[AntiBan] relayMessage blocked — ${decision.reason ?? "rate limited"}`
+                    );
+                    return;
+                }
+                if (decision.delayMs > 0) {
+                    await new Promise((r) => setTimeout(r, decision.delayMs));
+                }
+                try {
+                    const result = await originalRelayMessage(jid, message, opts);
+                    this.antiban.afterSend(jid, content);
+                    return result;
+                } catch (err: any) {
+                    const code: number | undefined =
+                        err?.output?.statusCode ?? err?.statusCode;
+                    this.antiban.afterSendFailed(code);
+                    throw err;
+                }
+            }
+
             return originalRelayMessage(jid, message, opts);
         };
+
+        // ── AntiBan: wrap sendMessage ──────────────────────────────────────
+        const originalSendMessage = (this as any).sendMessage?.bind(this);
+        if (originalSendMessage) {
+            (this as any).sendMessage = async (
+                jid: string,
+                content: any,
+                opts?: any
+            ) => {
+                const textContent =
+                    typeof content?.text === "string"
+                        ? content.text
+                        : typeof content?.caption === "string"
+                        ? content.caption
+                        : `[${Object.keys(content ?? {}).join(",")}]`;
+                const decision = this.antiban.beforeSend(jid, textContent);
+                if (!decision.allowed) {
+                    this.log(
+                        "info",
+                        `[AntiBan] Send blocked — ${decision.reason ?? "rate limited"}`
+                    );
+                    return undefined;
+                }
+                if (decision.delayMs > 0) {
+                    await new Promise((r) => setTimeout(r, decision.delayMs));
+                }
+                this._antibanSendActive = true;
+                try {
+                    const result = await originalSendMessage(jid, content, opts);
+                    this.antiban.afterSend(jid, textContent);
+                    return result;
+                } catch (err: any) {
+                    const code: number | undefined =
+                        err?.output?.statusCode ?? err?.statusCode;
+                    this.antiban.afterSendFailed(code);
+                    throw err;
+                } finally {
+                    this._antibanSendActive = false;
+                }
+            };
+        }
     }
 
     /** Read All Commands  */
@@ -483,7 +569,7 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
 
     private reset() {
         // Reset user limit
-        Cron("0 0 0 * * *", { timezone: this.config.timezone }, async () => {
+        Cron("0 0 0 * * *", { timezone: this.config.timeZone }, async () => {
             await Database.user.updateMany({
                 where: {
                     userId: {
@@ -649,17 +735,27 @@ export class Client extends (EventEmitter as new () => TypedEventEmitter<Events>
 
     public decodeJid = async (jid: string | null | undefined) => {
         if (!jid) return "";
-        if (/:\d+@/gi.test(jid)) {
+        let resolved = jid.trim();
+        if (/:\d+@/gi.test(resolved)) {
             const baileys = await getBaileys();
             const { jidDecode } = baileys;
-            const decode = jidDecode(jid) || ({} as any);
-            return (
+            const decode = jidDecode(resolved) || ({} as any);
+            resolved = (
                 (decode.user &&
                     decode.server &&
                     decode.user + "@" + decode.server) ||
-                jid
+                resolved
             ).trim();
-        } else return jid.trim();
+        }
+        // If the result is still a LID JID, attempt to resolve it to PN via
+        // the signal repository LID mapping stored by Baileys.
+        if (resolved.endsWith("@lid")) {
+            try {
+                const pn = await (this as any).signalRepository?.lidMapping?.getPNForLID(resolved);
+                if (pn) return (pn as string).trim();
+            } catch {}
+        }
+        return resolved;
     };
 
     /**

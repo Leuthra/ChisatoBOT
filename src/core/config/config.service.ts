@@ -26,6 +26,14 @@ export interface BotConfig {
     limit: {
         command: number;
     };
+    antiban: {
+        enabled: boolean;
+        maxPerMinute: number;
+        maxPerHour: number;
+        maxPerDay: number;
+        warmUpDays: number;
+        autoPauseAt: "low" | "medium" | "high" | "critical";
+    };
     cfonts: Record<string, any>;
 }
 
