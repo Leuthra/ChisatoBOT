@@ -176,7 +176,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         const existing = this.store.users[userId];
         if (!existing) throw new Error(`User not found: ${userId}`);
 
-        Object.assign(existing, data);
+        this.safeAssign(existing, data);
         this.markDirty("users");
         return existing;
     }
@@ -293,7 +293,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         const existing = this.store.groups[groupId];
         if (!existing) throw new Error(`Group not found: ${groupId}`);
 
-        Object.assign(existing, data);
+        this.safeAssign(existing, data);
         this.markDirty("groups");
         return existing;
     }
@@ -302,7 +302,7 @@ export class JsonAdapter implements IUserRepository, IGroupRepository, IAdminRep
         const existing = this.store.groups[groupId];
         if (!existing) throw new Error(`Group not found: ${groupId}`);
 
-        existing.settings = { ...existing.settings, ...settings } as GroupSettingsRecord;
+        this.safeAssign(existing.settings, settings as Partial<GroupSettingsRecord>);
         this.markDirty("groups");
         return existing;
     }
